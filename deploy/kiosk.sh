@@ -49,6 +49,7 @@ exec "$BROWSER" \
   --kiosk \
   $PLATFORM_FLAG \
   --enable-features=UseOzonePlatform \
+  --password-store=basic \
   --noerrdialogs \
   --disable-infobars \
   --disable-translate \
