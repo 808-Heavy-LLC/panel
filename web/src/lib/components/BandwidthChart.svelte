@@ -8,6 +8,11 @@
   let { wanId }: Props = $props();
 
   const WINDOW_MS = 90_000;
+  // Render slightly behind wall clock so the most recent sample sits just
+  // past the right edge and slides smoothly into view. With a 2s server
+  // poll, ~2s of delay means the curve always extends past the right edge
+  // and we never see the line "stop and wait" for the next tick.
+  const RENDER_DELAY_MS = 2000;
 
   let canvas: HTMLCanvasElement;
   let container: HTMLDivElement;
@@ -75,7 +80,8 @@
     const samples = panel.histories[wanId] ?? [];
     if (samples.length < 2) return;
 
-    const tMin = now - WINDOW_MS;
+    const renderNow = now - RENDER_DELAY_MS;
+    const tMin = renderNow - WINDOW_MS;
 
     let peak = 1;
     for (const s of samples) {
@@ -97,11 +103,12 @@
     ctx.fillStyle = grad;
     ctx.fillRect(cssW - 60, 0, 60, cssH);
 
-    const last = samples[samples.length - 1];
-    if (last) {
-      drawTip(ctx, cssW - 6, yOf(last.rxBps), colorPrimary);
-      drawTip(ctx, cssW - 6, yOf(last.txBps), colorSecondary);
-    }
+    // Tip dots: place at the right edge with the curve's value at renderNow,
+    // interpolated linearly between the bracketing samples.
+    const tipRx = sampleAt(samples, renderNow, (s) => s.rxBps);
+    const tipTx = sampleAt(samples, renderNow, (s) => s.txBps);
+    if (tipRx !== null) drawTip(ctx, cssW - 6, yOf(tipRx), colorPrimary);
+    if (tipTx !== null) drawTip(ctx, cssW - 6, yOf(tipTx), colorSecondary);
 
     ctx.fillStyle = colorTextDim;
     ctx.font = '10px "JetBrains Mono Variable", monospace';
@@ -125,10 +132,15 @@
     color: string,
     alphaFill: number,
   ) {
+    const pts: [number, number][] = samples.map((s) => [xOf(s.ts), yOf(pick(s))]);
+    const first = pts[0]!;
+    const last = pts[pts.length - 1]!;
+
     ctx.beginPath();
-    ctx.moveTo(xOf(samples[0]!.ts), cssH);
-    for (const s of samples) ctx.lineTo(xOf(s.ts), yOf(pick(s)));
-    ctx.lineTo(xOf(samples[samples.length - 1]!.ts), cssH);
+    ctx.moveTo(first[0], cssH);
+    ctx.lineTo(first[0], first[1]);
+    catmullRomSegments(ctx, pts);
+    ctx.lineTo(last[0], cssH);
     ctx.closePath();
     const grad = ctx.createLinearGradient(0, 0, 0, cssH);
     grad.addColorStop(0, colorWithAlpha(color, alphaFill));
@@ -137,8 +149,8 @@
     ctx.fill();
 
     ctx.beginPath();
-    ctx.moveTo(xOf(samples[0]!.ts), yOf(pick(samples[0]!)));
-    for (const s of samples) ctx.lineTo(xOf(s.ts), yOf(pick(s)));
+    ctx.moveTo(first[0], first[1]);
+    catmullRomSegments(ctx, pts);
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
     if (glowMult > 0.4) {
@@ -147,6 +159,43 @@
     }
     ctx.stroke();
     ctx.shadowBlur = 0;
+  }
+
+  // Connect points with cubic Beziers using Catmull-Rom control points
+  // (tension 0.5). Mirrors the endpoints so the curve stays anchored.
+  function catmullRomSegments(ctx: CanvasRenderingContext2D, pts: [number, number][]): void {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] ?? pts[i]!;
+      const p1 = pts[i]!;
+      const p2 = pts[i + 1]!;
+      const p3 = pts[i + 2] ?? p2;
+      const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
+      const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+      const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
+      const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2[0], p2[1]);
+    }
+  }
+
+  function sampleAt(
+    samples: { ts: number; rxBps: number; txBps: number }[],
+    t: number,
+    pick: (s: { ts: number; rxBps: number; txBps: number }) => number,
+  ): number | null {
+    let pre = null;
+    let post = null;
+    for (const s of samples) {
+      if (s.ts <= t) pre = s;
+      else {
+        post = s;
+        break;
+      }
+    }
+    if (pre && post) {
+      const k = (t - pre.ts) / (post.ts - pre.ts);
+      return pick(pre) + k * (pick(post) - pick(pre));
+    }
+    return pre ? pick(pre) : post ? pick(post) : null;
   }
 
   function drawTip(ctx: CanvasRenderingContext2D, x: number, y: number, color: string) {
