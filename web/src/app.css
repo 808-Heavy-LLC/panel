@@ -1,0 +1,503 @@
+@import 'tailwindcss';
+@import '@fontsource/orbitron/400.css';
+@import '@fontsource/orbitron/600.css';
+@import '@fontsource/orbitron/700.css';
+@import '@fontsource-variable/jetbrains-mono';
+@import '@fontsource/vt323/400.css';
+@import '@fontsource/share-tech-mono/400.css';
+
+/* ============================================================
+   Semantic design tokens. Per-theme overrides below.
+   Roles:
+     --c-bg-*       backgrounds
+     --c-line-*     borders / dividers
+     --c-primary    primary accent (rx/down/headers)
+     --c-secondary  secondary accent (tx/up)
+     --c-ok|warn|err
+     --c-text-*     text
+     --dpi-1..8     palette for category visualizations
+     --frame-corner chamfer size for HUD frames (0 = squared)
+     --glow-mult    multiplier on text-shadow blur radius
+   ============================================================ */
+
+:root,
+[data-theme='hud'] {
+  --c-bg: #06080c;
+  --c-bg-panel: #0a1018;
+  --c-bg-panel-2: #0d1622;
+  --c-bg-overlay: rgba(6, 8, 12, 0.7);
+
+  --c-line: #1a2838;
+  --c-line-bright: #2a4258;
+
+  --c-primary: #00d9ff;
+  --c-secondary: #ffb000;
+  --c-ok: #00ff9c;
+  --c-warn: #ffb000;
+  --c-err: #ff3a5c;
+
+  --c-text-bright: #d8ecff;
+  --c-text: #8aa3bd;
+  --c-text-dim: #4a5d75;
+
+  --dpi-1: #00d9ff;
+  --dpi-2: #ffb000;
+  --dpi-3: #00ff9c;
+  --dpi-4: #ff4ad9;
+  --dpi-5: #ff3a5c;
+  --dpi-6: #7eb8ff;
+  --dpi-7: #ff8a3c;
+  --dpi-8: #9affd6;
+
+  --font-display: 'Orbitron', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace;
+
+  --frame-corner: 14px;
+  --frame-border-blend: linear-gradient(135deg, var(--c-primary) 0%, var(--c-line-bright) 30%, var(--c-line-bright) 70%, var(--c-secondary) 100%);
+  --glow-mult: 1;
+
+  --bg-radial-1: radial-gradient(ellipse at top, color-mix(in oklab, var(--c-primary) 6%, transparent), transparent 60%);
+  --bg-radial-2: radial-gradient(ellipse at bottom right, color-mix(in oklab, var(--c-secondary) 4%, transparent), transparent 60%);
+
+  --noise-opacity: 0.04;
+  --scanline-opacity: 0.015;
+  --scanline-step: 4px;
+}
+
+[data-theme='cyberpunk'] {
+  --c-bg: #06010f;
+  --c-bg-panel: #0e0420;
+  --c-bg-panel-2: #150638;
+  --c-bg-overlay: rgba(6, 1, 15, 0.78);
+
+  --c-line: #2a0d52;
+  --c-line-bright: #4d1a8a;
+
+  --c-primary: #00fff5;
+  --c-secondary: #ff2bd0;
+  --c-ok: #00ff85;
+  --c-warn: #ffea00;
+  --c-err: #ff1f5c;
+
+  --c-text-bright: #ffd6f7;
+  --c-text: #b08fc7;
+  --c-text-dim: #5a3d75;
+
+  --dpi-1: #00fff5;
+  --dpi-2: #ff2bd0;
+  --dpi-3: #ffea00;
+  --dpi-4: #00ff85;
+  --dpi-5: #ff5cb0;
+  --dpi-6: #b347ff;
+  --dpi-7: #66ffff;
+  --dpi-8: #ff7c47;
+
+  --font-display: 'Orbitron', system-ui, sans-serif;
+  --font-mono: 'VT323', 'JetBrains Mono Variable', monospace;
+
+  --frame-corner: 18px;
+  --frame-border-blend: linear-gradient(135deg, var(--c-primary) 0%, var(--c-secondary) 50%, var(--c-primary) 100%);
+  --glow-mult: 1.8;
+
+  --bg-radial-1: radial-gradient(ellipse 80% 60% at 50% 100%, color-mix(in oklab, var(--c-secondary) 22%, transparent), transparent 70%);
+  --bg-radial-2: radial-gradient(ellipse 100% 50% at 50% 0%, color-mix(in oklab, var(--c-primary) 10%, transparent), transparent 60%);
+
+  --noise-opacity: 0.07;
+  --scanline-opacity: 0.04;
+  --scanline-step: 3px;
+}
+
+[data-theme='mission-control'] {
+  --c-bg: #0d0f12;
+  --c-bg-panel: #161a1f;
+  --c-bg-panel-2: #1d2228;
+  --c-bg-overlay: rgba(13, 15, 18, 0.7);
+
+  --c-line: #2a3038;
+  --c-line-bright: #3d4754;
+
+  --c-primary: #ffb000;
+  --c-secondary: #00cc66;
+  --c-ok: #00cc66;
+  --c-warn: #ffb000;
+  --c-err: #ff5050;
+
+  --c-text-bright: #ffd57a;
+  --c-text: #c8b78a;
+  --c-text-dim: #7a6d52;
+
+  --dpi-1: #ffb000;
+  --dpi-2: #00cc66;
+  --dpi-3: #ff5050;
+  --dpi-4: #ffd57a;
+  --dpi-5: #6a9a4f;
+  --dpi-6: #d4a040;
+  --dpi-7: #b56a00;
+  --dpi-8: #4f8a4f;
+
+  --font-display: 'Share Tech Mono', 'JetBrains Mono Variable', monospace;
+  --font-mono: 'Share Tech Mono', 'JetBrains Mono Variable', monospace;
+
+  --frame-corner: 0px;
+  --frame-border-blend: linear-gradient(180deg, var(--c-line-bright), var(--c-line-bright));
+  --glow-mult: 0.4;
+
+  --bg-radial-1: radial-gradient(ellipse at top, color-mix(in oklab, var(--c-primary) 3%, transparent), transparent 70%);
+  --bg-radial-2: none;
+
+  --noise-opacity: 0.03;
+  --scanline-opacity: 0.025;
+  --scanline-step: 3px;
+}
+
+[data-theme='matrix'] {
+  --c-bg: #000300;
+  --c-bg-panel: #001a0d;
+  --c-bg-panel-2: #00220e;
+  --c-bg-overlay: rgba(0, 3, 0, 0.7);
+
+  --c-line: #003d1f;
+  --c-line-bright: #00662e;
+
+  --c-primary: #00ff41;
+  --c-secondary: #00b32d;
+  --c-ok: #00ff41;
+  --c-warn: #d6ff00;
+  --c-err: #ff4747;
+
+  --c-text-bright: #b3ffb3;
+  --c-text: #57b357;
+  --c-text-dim: #2d6c39;
+
+  --dpi-1: #00ff41;
+  --dpi-2: #00cc34;
+  --dpi-3: #66ff85;
+  --dpi-4: #009928;
+  --dpi-5: #b3ff66;
+  --dpi-6: #d6ff00;
+  --dpi-7: #00b32d;
+  --dpi-8: #80ff80;
+
+  --font-display: 'Share Tech Mono', monospace;
+  --font-mono: 'Share Tech Mono', 'JetBrains Mono Variable', monospace;
+
+  --frame-corner: 0px;
+  --frame-border-blend: linear-gradient(180deg, var(--c-primary), var(--c-secondary));
+  --glow-mult: 1.2;
+
+  --bg-radial-1: radial-gradient(ellipse at center, color-mix(in oklab, var(--c-primary) 4%, transparent), transparent 65%);
+  --bg-radial-2: none;
+
+  --noise-opacity: 0.02;
+  --scanline-opacity: 0.025;
+  --scanline-step: 3px;
+}
+
+/* ============================================================
+   Global resets + body chrome
+   ============================================================ */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--c-bg);
+  color: var(--c-text-bright);
+  font-family: var(--font-mono);
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg-radial-1), var(--bg-radial-2), var(--c-bg);
+  transition: background 600ms ease;
+}
+
+@media (display-mode: fullscreen), (display-mode: standalone) {
+  html,
+  body {
+    cursor: none;
+  }
+}
+
+.hud-noise {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--noise-opacity);
+  z-index: 100;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  mix-blend-mode: overlay;
+}
+
+.hud-scanlines {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 99;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--scanline-step) - 1px),
+    color-mix(in oklab, var(--c-primary) calc(var(--scanline-opacity) * 100%), transparent) calc(var(--scanline-step) - 0.5px),
+    transparent var(--scanline-step)
+  );
+}
+
+/* ============================================================
+   HUD frame: chamfered cut corners (or square per theme)
+   ============================================================ */
+
+.hud-frame {
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--c-bg-panel) 92%, transparent),
+    color-mix(in oklab, var(--c-bg-panel-2) 92%, transparent)
+  );
+  --corner: var(--frame-corner);
+  clip-path: polygon(
+    0 var(--corner),
+    var(--corner) 0,
+    calc(100% - var(--corner)) 0,
+    100% var(--corner),
+    100% calc(100% - var(--corner)),
+    calc(100% - var(--corner)) 100%,
+    var(--corner) 100%,
+    0 calc(100% - var(--corner))
+  );
+}
+
+.hud-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  background: var(--frame-border-blend);
+  clip-path: polygon(
+    0 var(--corner),
+    var(--corner) 0,
+    calc(100% - var(--corner)) 0,
+    100% var(--corner),
+    100% calc(100% - var(--corner)),
+    calc(100% - var(--corner)) 100%,
+    var(--corner) 100%,
+    0 calc(100% - var(--corner)),
+    0 var(--corner),
+    1px calc(var(--corner) + 0.4px),
+    1px calc(100% - var(--corner) - 0.4px),
+    calc(var(--corner) + 0.4px) calc(100% - 1px),
+    calc(100% - var(--corner) - 0.4px) calc(100% - 1px),
+    calc(100% - 1px) calc(100% - var(--corner) - 0.4px),
+    calc(100% - 1px) calc(var(--corner) + 0.4px),
+    calc(100% - var(--corner) - 0.4px) 1px,
+    calc(var(--corner) + 0.4px) 1px,
+    1px calc(var(--corner) + 0.4px)
+  );
+  pointer-events: none;
+}
+
+.hud-corner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-color: var(--c-primary);
+  pointer-events: none;
+}
+.hud-corner.tl {
+  top: 4px;
+  left: 4px;
+  border-top: 2px solid;
+  border-left: 2px solid;
+}
+.hud-corner.tr {
+  top: 4px;
+  right: 4px;
+  border-top: 2px solid;
+  border-right: 2px solid;
+}
+.hud-corner.bl {
+  bottom: 4px;
+  left: 4px;
+  border-bottom: 2px solid;
+  border-left: 2px solid;
+}
+.hud-corner.br {
+  bottom: 4px;
+  right: 4px;
+  border-bottom: 2px solid;
+  border-right: 2px solid;
+}
+
+/* Mission Control: prefer hard rectangular borders w/o brackets */
+[data-theme='mission-control'] .hud-corner {
+  display: none;
+}
+[data-theme='mission-control'] .hud-frame::before {
+  background: var(--c-line-bright);
+}
+
+/* Matrix: thinner brackets, primary-only, see-through frames so rain shows */
+[data-theme='matrix'] .hud-corner {
+  width: 12px;
+  height: 12px;
+  border-width: 1px !important;
+}
+[data-theme='matrix'] .hud-frame {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--c-bg-panel) 65%, transparent),
+    color-mix(in oklab, var(--c-bg-panel-2) 65%, transparent)
+  );
+}
+[data-theme='matrix'] .hud-frame::before {
+  background: linear-gradient(180deg, var(--c-primary), var(--c-secondary));
+  opacity: 0.6;
+}
+
+/* Cyberpunk: more transparent frames so the perspective grid bleeds through */
+[data-theme='cyberpunk'] .hud-frame {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--c-bg-panel) 78%, transparent),
+    color-mix(in oklab, var(--c-bg-panel-2) 78%, transparent)
+  );
+}
+
+/* ============================================================
+   Type utilities (semantic colors, glow scales w/ theme)
+   ============================================================ */
+
+.hud-label {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--c-primary);
+  text-shadow: 0 0 calc(8px * var(--glow-mult)) color-mix(in oklab, var(--c-primary) 40%, transparent);
+}
+
+.hud-value-primary {
+  color: var(--c-primary);
+  text-shadow: 0 0 calc(12px * var(--glow-mult)) color-mix(in oklab, var(--c-primary) 50%, transparent);
+}
+.hud-value-secondary {
+  color: var(--c-secondary);
+  text-shadow: 0 0 calc(12px * var(--glow-mult)) color-mix(in oklab, var(--c-secondary) 50%, transparent);
+}
+.hud-value-ok {
+  color: var(--c-ok);
+  text-shadow: 0 0 calc(10px * var(--glow-mult)) color-mix(in oklab, var(--c-ok) 40%, transparent);
+}
+
+.hud-pulse-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-ok);
+  box-shadow: 0 0 calc(8px * var(--glow-mult)) var(--c-ok);
+  animation: hud-pulse 1.6s ease-in-out infinite;
+}
+.hud-pulse-dot.warn {
+  background: var(--c-warn);
+  box-shadow: 0 0 calc(8px * var(--glow-mult)) var(--c-warn);
+}
+.hud-pulse-dot.err {
+  background: var(--c-err);
+  box-shadow: 0 0 calc(8px * var(--glow-mult)) var(--c-err);
+}
+
+@keyframes hud-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes hud-flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  47% {
+    opacity: 1;
+  }
+  48% {
+    opacity: 0.6;
+  }
+  49% {
+    opacity: 1;
+  }
+}
+.hud-flicker {
+  animation: hud-flicker 7s linear infinite;
+}
+
+@keyframes hud-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+.hud-sweep {
+  position: relative;
+  overflow: hidden;
+}
+.hud-sweep::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--c-primary) 18%, transparent),
+    transparent
+  );
+  animation: hud-sweep 4s linear infinite;
+  pointer-events: none;
+}
+
+/* ============================================================
+   Cyberpunk: occasional rgb-shift glitch on whole UI
+   ============================================================ */
+
+@keyframes cyber-glitch {
+  0%, 96%, 100% {
+    transform: translate(0, 0);
+    filter: none;
+  }
+  96.5% {
+    transform: translate(-2px, 1px);
+    filter: hue-rotate(-15deg) saturate(1.4);
+  }
+  97% {
+    transform: translate(2px, -1px);
+    filter: hue-rotate(15deg) saturate(1.4);
+  }
+  97.5% {
+    transform: translate(-1px, 0);
+    filter: none;
+  }
+}
+
+[data-theme='cyberpunk'] .panel-root {
+  animation: cyber-glitch 11s linear infinite;
+}
+
+/* ============================================================
+   Mission Control: kill animations, look like a quiet console
+   ============================================================ */
+
+[data-theme='mission-control'] .hud-sweep::after {
+  display: none;
+}
+[data-theme='mission-control'] .hud-noise {
+  display: none;
+}

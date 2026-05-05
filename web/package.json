@@ -1,0 +1,31 @@
+{
+  "name": "@panel/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --port 5173",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.8",
+    "@sveltejs/kit": "^2.15.0",
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/d3-scale": "^4.0.8",
+    "svelte": "^5.16.0",
+    "svelte-check": "^4.1.1",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  },
+  "dependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.1.2",
+    "@fontsource/orbitron": "^5.1.1",
+    "@fontsource/share-tech-mono": "^5.1.1",
+    "@fontsource/vt323": "^5.1.1",
+    "d3-scale": "^4.0.2"
+  }
+}
