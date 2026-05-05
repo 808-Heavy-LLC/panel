@@ -18,12 +18,12 @@ type RawHealth = {
 };
 
 type RawClient = {
-  _id?: string;
+  id?: string;
   user_id?: string;
   mac?: string;
   ip?: string;
   hostname?: string;
-  name?: string;
+  display_name?: string;
   oui?: string;
   is_wired?: boolean;
   signal?: number;
@@ -33,6 +33,12 @@ type RawClient = {
   'tx_bytes-r'?: number;
   first_seen?: number;
   last_seen?: number;
+  fingerprint?: {
+    computed_dev_id?: number;
+    dev_id?: number;
+    dev_id_override?: number;
+    has_override?: boolean;
+  };
 };
 
 type RawTrafficApp = {
@@ -123,6 +129,9 @@ export class UnifiClient {
   /** Category id → human name. Loaded from same UI catalog as appCatalog;
    *  authoritative over the hardcoded fallback in DPI_CATEGORIES. */
   private categoryCatalog: Map<number, string> = new Map();
+  /** Device fingerprint id → device name (e.g. 2900 → "Apple TV"). Loaded
+   *  from /v2/api/fingerprint_devices/0 once at connect. */
+  private deviceCatalog: Map<number, string> = new Map();
 
   constructor(private opts: UnifiOpts) {
     this.agent = new Agent({
@@ -153,6 +162,12 @@ export class UnifiClient {
         );
       } catch (err) {
         console.error('[unifi] DPI catalog fetch failed:', err);
+      }
+      try {
+        this.deviceCatalog = await this.fetchDeviceCatalog();
+        console.log(`[unifi] device catalog loaded: ${this.deviceCatalog.size} entries`);
+      } catch (err) {
+        console.error('[unifi] device catalog fetch failed:', err);
       }
     } else if (this.mode === 'integration') {
       // Probe sites endpoint to verify key works.
@@ -187,6 +202,48 @@ export class UnifiClient {
       else if (id <= 255 && !categories.has(id)) categories.set(id, name);
     }
     return { apps, categories };
+  }
+
+  /** Fetch UniFi's device-fingerprint catalog. Maps numeric dev_id (the
+   *  fingerprint engine's identifier for a make+model) to a human-readable
+   *  name like "Apple TV" or "Ring Backyard". */
+  private async fetchDeviceCatalog(): Promise<Map<number, string>> {
+    const r = await this.legacyGet<{
+      dev_ids?: Record<string, { name?: string }>;
+    }>('/v2/api/fingerprint_devices/0');
+    const map = new Map<number, string>();
+    for (const [id, entry] of Object.entries(r.dev_ids ?? {})) {
+      const name = entry.name?.trim();
+      if (name) map.set(Number(id), name);
+    }
+    return map;
+  }
+
+  private toClient(c: RawClient): ClientStat {
+    const id = c.id ?? c.user_id ?? c.mac ?? '';
+    const fp = c.fingerprint;
+    // Override beats the auto-computed id (lets users rename in UDM UI).
+    const devId = fp?.has_override
+      ? (fp.dev_id_override ?? fp.dev_id)
+      : (fp?.computed_dev_id ?? fp?.dev_id);
+    const device = devId ? (this.deviceCatalog.get(devId) ?? null) : null;
+    const vendor = c.oui && c.oui.length > 0 ? c.oui : null;
+    return {
+      id,
+      name: c.display_name ?? c.hostname ?? c.mac ?? id,
+      ip: c.ip ?? null,
+      mac: c.mac ?? '',
+      rxBps: c['rx_bytes-r'] ?? 0,
+      txBps: c['tx_bytes-r'] ?? 0,
+      rxBytes: c.rx_bytes ?? 0,
+      txBytes: c.tx_bytes ?? 0,
+      isWired: c.is_wired === true,
+      signal: c.signal ?? null,
+      vendor,
+      device,
+      firstSeen: c.first_seen ?? null,
+      lastSeen: c.last_seen ?? null,
+    };
   }
 
   private async legacyGetText(path: string): Promise<string> {
@@ -267,8 +324,13 @@ export class UnifiClient {
 
   async getClients(): Promise<ClientStat[]> {
     if (this.mode === 'legacy') {
-      const r = await this.legacyGet<{ data: RawClient[] }>(`/api/s/${this.opts.site}/stat/sta`);
-      return (r.data ?? []).map(toClient);
+      // The v2 endpoint returns much richer client info: a UI-formatted
+      // display_name, vendor (oui), and a fingerprint object with the
+      // computed device id we look up against the fingerprint catalog.
+      const r = await this.legacyGet<RawClient[]>(
+        `/v2/api/site/${this.opts.site}/clients/active?includeTrafficUsage=true&includeUnifiDevices=false`,
+      );
+      return (r ?? []).map((c) => this.toClient(c));
     }
     if (this.mode === 'integration') {
       const sites = await this.integrationGet<{ data: Array<{ id: string }> }>(
@@ -297,7 +359,8 @@ export class UnifiClient {
         txBytes: 0,
         isWired: c.type === 'WIRED',
         signal: null,
-        oui: null,
+        vendor: null,
+        device: null,
         firstSeen: c.connectedAt ? Math.floor(new Date(c.connectedAt).getTime() / 1000) : null,
         lastSeen: null,
       }));
@@ -390,21 +453,3 @@ function parsePct(v: string | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function toClient(c: RawClient): ClientStat {
-  const id = c._id ?? c.user_id ?? c.mac ?? '';
-  return {
-    id,
-    name: c.name ?? c.hostname ?? c.mac ?? id,
-    ip: c.ip ?? null,
-    mac: c.mac ?? '',
-    rxBps: c['rx_bytes-r'] ?? 0,
-    txBps: c['tx_bytes-r'] ?? 0,
-    rxBytes: c.rx_bytes ?? 0,
-    txBytes: c.tx_bytes ?? 0,
-    isWired: c.is_wired === true,
-    signal: c.signal ?? null,
-    oui: c.oui ?? null,
-    firstSeen: c.first_seen ?? null,
-    lastSeen: c.last_seen ?? null,
-  };
-}

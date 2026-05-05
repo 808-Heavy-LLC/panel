@@ -23,12 +23,18 @@
     {@const fmtRx = formatBps(client.rxBps)}
     {@const fmtTx = formatBps(client.txBps)}
     {@const fmtTotal = formatBytes(client.rxBytes + client.txBytes)}
+    {@const subtitle = [client.device, client.vendor].filter(Boolean).join(' · ')}
     <li animate:flip={{ duration: 400 }} class="client-row">
       <div class="row-head">
         <span class="conn-glyph" class:wired={client.isWired} title={client.isWired ? 'Wired' : 'Wireless'}>
           {client.isWired ? '◆' : '◇'}
         </span>
-        <span class="name truncate">{client.name}</span>
+        <span class="name-stack min-w-0">
+          <span class="name truncate">{client.name}</span>
+          {#if subtitle}
+            <span class="meta truncate">{subtitle}</span>
+          {/if}
+        </span>
         <span class="ip text-[var(--c-text-dim)]">{client.ip ?? ''}</span>
         <span class="totals text-[var(--c-text-dim)]">
           ↓ <span class="text-[var(--c-primary)]">{fmtRx.value}</span>
@@ -74,8 +80,18 @@
     align-items: baseline;
     font-size: 12px;
   }
+  .name-stack {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+  }
   .name {
     color: var(--c-text-bright);
+  }
+  .meta {
+    font-size: 10px;
+    color: var(--c-text-dim);
+    letter-spacing: 0.06em;
   }
   .ip {
     font-size: 10px;

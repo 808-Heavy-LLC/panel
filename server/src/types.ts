@@ -30,7 +30,8 @@ export type ClientStat = {
   txBytes: number;
   isWired: boolean;
   signal: number | null;
-  oui: string | null;
+  vendor: string | null;
+  device: string | null;
   firstSeen: number | null;
   lastSeen: number | null;
 };
