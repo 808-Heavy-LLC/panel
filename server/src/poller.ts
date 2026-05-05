@@ -78,6 +78,35 @@ export async function startPoller(): Promise<void> {
   let dpiAt = 0;
   let udmAt = 0;
 
+  // UDM's per-client rate fields (rx_bytes-r/tx_bytes-r) are unreliable —
+  // they return 0 for most clients on real hardware. Compute rates ourselves
+  // from successive byte totals.
+  type Prev = { rxBytes: number; txBytes: number; ts: number };
+  let prevByClient = new Map<string, Prev>();
+  function deriveClientRates(input: ClientStat[]): ClientStat[] {
+    const now = Date.now();
+    const next = new Map<string, Prev>();
+    const out = input.map((c) => {
+      const key = c.id || c.mac;
+      const prev = prevByClient.get(key);
+      let rxBps = c.rxBps;
+      let txBps = c.txBps;
+      if (prev && now > prev.ts) {
+        const dt = (now - prev.ts) / 1000;
+        if (dt > 0 && dt < 120) {
+          const drx = c.rxBytes - prev.rxBytes;
+          const dtx = c.txBytes - prev.txBytes;
+          if (drx >= 0) rxBps = drx / dt;
+          if (dtx >= 0) txBps = dtx / dt;
+        }
+      }
+      next.set(key, { rxBytes: c.rxBytes, txBytes: c.txBytes, ts: now });
+      return { ...c, rxBps, txBps };
+    });
+    prevByClient = next;
+    return out;
+  }
+
   const tick = async (): Promise<void> => {
     const now = Date.now();
     try {
@@ -90,7 +119,7 @@ export async function startPoller(): Promise<void> {
           source
             .getClients()
             .then((c) => {
-              lastClients = c;
+              lastClients = config.mock ? c : deriveClientRates(c);
             })
             .catch((e) => console.error('[poller] clients error', e)),
         );

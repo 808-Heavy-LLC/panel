@@ -40,6 +40,17 @@
       </div>
     </div>
   </div>
+{:else if top.length === 0}
+  <div class="grid h-full place-items-center px-4 text-center">
+    <div class="space-y-2">
+      <div class="hud-label text-[12px]" style="color: var(--c-secondary);">NO DPI DATA</div>
+      <div class="text-[11px] text-[var(--c-text-dim)] leading-relaxed">
+        Enable <span class="text-[var(--c-text)]">Traffic Identification</span> in your UDM under
+        <span class="text-[var(--c-text)]">Settings → Traffic Management</span>.
+        Data may take a few minutes to populate after enabling.
+      </div>
+    </div>
+  </div>
 {:else}
   <div class="flex h-full gap-4">
     <div class="flex flex-col items-center justify-center">
