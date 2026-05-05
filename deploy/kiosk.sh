@@ -36,9 +36,18 @@ if [ -z "${BROWSER:-}" ]; then
   exit 1
 fi
 
+# Pick the right Ozone platform. --ozone-platform-hint=auto isn't reliable on
+# Debian's chromium build, so we force the matching backend explicitly.
+PLATFORM_FLAG=""
+if [ -n "${WAYLAND_DISPLAY:-}" ] || [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
+  PLATFORM_FLAG="--ozone-platform=wayland"
+elif [ -n "${DISPLAY:-}" ]; then
+  PLATFORM_FLAG="--ozone-platform=x11"
+fi
+
 exec "$BROWSER" \
   --kiosk \
-  --ozone-platform-hint=auto \
+  $PLATFORM_FLAG \
   --enable-features=UseOzonePlatform \
   --noerrdialogs \
   --disable-infobars \
