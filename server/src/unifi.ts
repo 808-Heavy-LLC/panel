@@ -46,15 +46,25 @@ type RawDpiByCat = {
   by_cat?: Array<{ cat: number; rx_bytes: number; tx_bytes: number; apps?: RawDpiEntry[] }>;
 };
 
-type RawSysInfo = {
+type RawDevice = {
+  _id?: string;
   name?: string;
   hostname?: string;
-  device_type?: string;
   model?: string;
+  type?: string;
+  is_gateway?: boolean;
   version?: string;
   uptime?: number;
   'system-stats'?: { cpu?: string; mem?: string; uptime?: string };
   temperatures?: Array<{ value?: number; name?: string; type?: string }>;
+};
+
+const MODEL_NAMES: Record<string, string> = {
+  UDMPROMAX: 'UDM Pro Max',
+  UDMPRO: 'UDM Pro',
+  UDMSE: 'UDM SE',
+  UDMR: 'UDM R',
+  UDM: 'UDM',
 };
 
 const DPI_CATEGORIES: Record<number, string> = {
@@ -252,17 +262,31 @@ export class UnifiClient {
 
   async getUdmInfo(): Promise<UdmInfo | null> {
     if (this.mode !== 'legacy') return null;
-    const r = await this.legacyGet<{ data: RawSysInfo[] }>(`/api/s/${this.opts.site}/stat/sysinfo`);
-    const s = r.data?.[0];
-    if (!s) return null;
+    // Hardware stats (cpu/mem/temp) live on the gateway *device* entry,
+    // not on /stat/sysinfo (which is just controller/Network-app metadata).
+    const r = await this.legacyGet<{ data: RawDevice[] }>(`/api/s/${this.opts.site}/stat/device`);
+    const gw = (r.data ?? []).find(
+      (d) =>
+        d.is_gateway === true ||
+        d.type === 'ugw' ||
+        (d.model ?? '').startsWith('UDM') ||
+        (d.model ?? '').startsWith('UGW'),
+    );
+    if (!gw) return null;
+    const stats = gw['system-stats'];
+    const cpuTemp =
+      gw.temperatures?.find((t) => t.type === 'cpu')?.value ??
+      gw.temperatures?.[0]?.value ??
+      null;
+    const uptimeFromStats = stats?.uptime ? Number.parseInt(stats.uptime, 10) : NaN;
     return {
-      name: s.name ?? s.hostname ?? 'UDM',
-      model: s.model ?? s.device_type ?? 'UDM Pro Max',
-      firmware: s.version ?? '',
-      uptimeSec: s.uptime ?? 0,
-      cpuPct: parsePct(s['system-stats']?.cpu),
-      memPct: parsePct(s['system-stats']?.mem),
-      tempC: s.temperatures?.[0]?.value ?? null,
+      name: gw.name ?? gw.hostname ?? 'UDM',
+      model: MODEL_NAMES[gw.model ?? ''] ?? gw.model ?? 'Gateway',
+      firmware: gw.version ?? '',
+      uptimeSec: Number.isFinite(uptimeFromStats) ? uptimeFromStats : (gw.uptime ?? 0),
+      cpuPct: parsePct(stats?.cpu),
+      memPct: parsePct(stats?.mem),
+      tempC: cpuTemp,
     };
   }
 }
