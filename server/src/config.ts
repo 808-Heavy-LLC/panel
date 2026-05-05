@@ -54,8 +54,11 @@ export const config = {
   },
   poll: {
     wanMs: num(process.env.PANEL_POLL_WAN_MS, 2000),
-    clientsMs: num(process.env.PANEL_POLL_CLIENTS_MS, 5000),
-    dpiMs: num(process.env.PANEL_POLL_DPI_MS, 30000),
+    // UDM controller caches /stat/sta responses for ~30s, so polling
+    // faster yields identical byte counters and 0 derived rates. 30s
+    // matches that cache window — derived rates are a 30s rolling average.
+    clientsMs: num(process.env.PANEL_POLL_CLIENTS_MS, 30000),
+    dpiMs: num(process.env.PANEL_POLL_DPI_MS, 60000),
     udmInfoMs: num(process.env.PANEL_POLL_UDM_MS, 15000),
   },
   history: {

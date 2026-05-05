@@ -83,36 +83,26 @@ export async function startPoller(): Promise<void> {
   // from successive byte totals.
   type Prev = { rxBytes: number; txBytes: number; ts: number };
   let prevByClient = new Map<string, Prev>();
-  let deriveCalls = 0;
   function deriveClientRates(input: ClientStat[]): ClientStat[] {
     const now = Date.now();
     const next = new Map<string, Prev>();
-    let nzCount = 0;
-    let matchedPrev = 0;
     const out = input.map((c) => {
       const key = c.id || c.mac;
       const prev = prevByClient.get(key);
       let rxBps = c.rxBps;
       let txBps = c.txBps;
       if (prev && now > prev.ts) {
-        matchedPrev++;
         const dt = (now - prev.ts) / 1000;
-        if (dt > 0 && dt < 120) {
+        if (dt > 0 && dt < 600) {
           const drx = c.rxBytes - prev.rxBytes;
           const dtx = c.txBytes - prev.txBytes;
           if (drx >= 0) rxBps = drx / dt;
           if (dtx >= 0) txBps = dtx / dt;
         }
       }
-      if (rxBps > 0 || txBps > 0) nzCount++;
       next.set(key, { rxBytes: c.rxBytes, txBytes: c.txBytes, ts: now });
       return { ...c, rxBps, txBps };
     });
-    deriveCalls++;
-    if (deriveCalls <= 6) {
-      const sample = input[0];
-      console.log(`[derive #${deriveCalls}] in=${input.length} prevSize=${prevByClient.size} matched=${matchedPrev} nonZero=${nzCount} sampleKey=${sample ? (sample.id || sample.mac) : 'n/a'} sampleRxBytes=${sample?.rxBytes}`);
-    }
     prevByClient = next;
     return out;
   }
