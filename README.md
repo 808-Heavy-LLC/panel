@@ -59,18 +59,11 @@ npm run typecheck    # both workspaces
 
 There is no test suite. Typecheck is the only check.
 
-## Themes
+## Theme
 
-Seven themes live in CSS custom properties under `[data-theme="…"]` in `web/src/app.css`: `hud` (cyan/amber default), `cyberpunk` (cyan/magenta neon), `synthwave` (warm pink/teal sunset), `infrared` (thermal orange/red), `blueprint` (white-on-navy with grid), `phosphor` (amber CRT monochrome), `arctic` (ice-blue/white). The current theme is persisted in `localStorage`.
+One theme: `hud` (cyan/amber). Defined in CSS custom properties under `:root` in `web/src/app.css`. The `theme.svelte.ts` infrastructure is left in place so additional themes can be slotted into `THEMES` later.
 
-Keyboard:
-
-- `t` — cycle forward
-- `Shift+t` — cycle backward
-- `1`–`7` — jump to theme
-- `?theme=synthwave` URL param overrides
-
-To prevent kiosk LCD burn-in, `web/src/lib/burnInGuard.ts` drifts the UI by a few pixels every few minutes and rotates the active theme. New themes should keep their animation cost roughly equal — heavy themes break the rotation.
+To prevent kiosk LCD burn-in, `web/src/lib/burnInGuard.ts` drifts the UI by a few pixels every three minutes.
 
 ## Deploying to a Pi
 

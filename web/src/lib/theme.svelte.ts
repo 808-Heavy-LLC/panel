@@ -1,22 +1,8 @@
-export const THEMES = [
-  'hud',
-  'cyberpunk',
-  'synthwave',
-  'infrared',
-  'blueprint',
-  'phosphor',
-  'arctic',
-] as const;
+export const THEMES = ['hud'] as const;
 export type ThemeName = (typeof THEMES)[number];
 
 export const THEME_LABELS: Record<ThemeName, string> = {
   hud: 'HUD',
-  cyberpunk: 'CYBERPUNK',
-  synthwave: 'SYNTHWAVE',
-  infrared: 'INFRARED',
-  blueprint: 'BLUEPRINT',
-  phosphor: 'PHOSPHOR',
-  arctic: 'ARCTIC',
 };
 
 const STORAGE_KEY = 'panel.theme';

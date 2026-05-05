@@ -1,5 +1,3 @@
-import { theme } from './theme.svelte.js';
-
 // 9 positions in a small grid (±4px max). Different offsets in each axis
 // so static UI elements never sit on the exact same pixel for long.
 const DRIFT_OFFSETS: ReadonlyArray<readonly [number, number]> = [
@@ -16,16 +14,13 @@ const DRIFT_OFFSETS: ReadonlyArray<readonly [number, number]> = [
 
 export type BurnInGuardOptions = {
   driftMs?: number;
-  cycleMs?: number;
   selector?: string;
 };
 
-/** Periodically shift the UI by a few pixels and cycle the theme so static
- *  bright elements never burn into a single LCD subpixel. Returns a cleanup
- *  function that stops both timers. */
+/** Periodically shift the UI by a few pixels so static bright elements never
+ *  burn into a single LCD subpixel. Returns a cleanup function. */
 export function startBurnInGuard(opts: BurnInGuardOptions = {}): () => void {
   const driftMs = opts.driftMs ?? 180_000;
-  const cycleMs = opts.cycleMs ?? 300_000;
   const selector = opts.selector ?? '.panel-root';
 
   let idx = 1; // start at 1 so first drift moves off (0,0)
@@ -38,10 +33,5 @@ export function startBurnInGuard(opts: BurnInGuardOptions = {}): () => void {
   }
 
   const driftTimer = window.setInterval(drift, driftMs);
-  const cycleTimer = window.setInterval(() => theme.cycle(1), cycleMs);
-
-  return () => {
-    window.clearInterval(driftTimer);
-    window.clearInterval(cycleTimer);
-  };
+  return () => window.clearInterval(driftTimer);
 }
