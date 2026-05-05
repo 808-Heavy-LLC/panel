@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { connectWs, panel } from '$lib/store.svelte';
   import { theme } from '$lib/theme.svelte';
+  import { startBurnInGuard } from '$lib/burnInGuard';
   import HudHeader from '$lib/components/HudHeader.svelte';
   import HudFrame from '$lib/components/HudFrame.svelte';
   import BandwidthChart from '$lib/components/BandwidthChart.svelte';
@@ -14,9 +15,11 @@
   onMount(() => {
     const dispose = theme.init();
     const stop = connectWs();
+    const stopGuard = startBurnInGuard();
     return () => {
       dispose();
       stop();
+      stopGuard();
     };
   });
 </script>

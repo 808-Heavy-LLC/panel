@@ -168,6 +168,11 @@ body {
   overflow: hidden;
 }
 
+/* Burn-in guard: smooth transitions for the periodic pixel-drift shifts. */
+.panel-root {
+  transition: transform 1.6s ease-in-out;
+}
+
 body {
   background: var(--bg-radial-1), var(--bg-radial-2), var(--c-bg);
   transition: background 600ms ease;
