@@ -250,25 +250,6 @@ export class UnifiClient {
       .sort((a, b) => b.bytes - a.bytes);
   }
 
-  /** Map of ifName ('eth9') → public WAN IP. Sources from /stat/health. */
-  async getWanIps(): Promise<Record<string, string>> {
-    if (this.mode !== 'legacy') return {};
-    try {
-      const r = await this.legacyGet<{ data: Array<{ subsystem?: string; wan_ip?: string; ifname?: string }> }>(
-        `/api/s/${this.opts.site}/stat/health`,
-      );
-      const out: Record<string, string> = {};
-      for (const d of r.data ?? []) {
-        if (d.subsystem === 'wan' || d.subsystem === 'wan2') {
-          if (d.ifname && d.wan_ip) out[d.ifname] = d.wan_ip;
-        }
-      }
-      return out;
-    } catch {
-      return {};
-    }
-  }
-
   async getUdmInfo(): Promise<UdmInfo | null> {
     if (this.mode !== 'legacy') return null;
     const r = await this.legacyGet<{ data: RawSysInfo[] }>(`/api/s/${this.opts.site}/stat/sysinfo`);

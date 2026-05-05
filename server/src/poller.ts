@@ -117,10 +117,15 @@ export async function startPoller(): Promise<void> {
   store.setFeatures({ snmpAvailable: snmpOk });
 
   // Build runtime WAN entries; label from env or fallback to "WAN N".
+  // Prefer ifAlias (UDM sets it to "eth9"/"eth10") over the long ifDescr.
   const wans: WanRuntime[] = wanIfaces.map((iface, i) => ({
     id: `wan${i + 1}`,
     ifIndex: iface.ifIndex,
-    ifName: iface.ifName.match(/eth\d+$/)?.[0] ?? iface.ifName,
+    ifName:
+      iface.ifAlias ||
+      iface.ifName.match(/eth\d+$/)?.[0] ||
+      iface.ifName ||
+      `if${iface.ifIndex}`,
     label: config.snmp.wanLabels[i] ?? `WAN ${i + 1}`,
     speedBitsPerSec: iface.ifHighSpeedMbps * 1_000_000,
     prevRx: 0,
@@ -132,20 +137,9 @@ export async function startPoller(): Promise<void> {
     txBps: 0,
   }));
 
-  // Cache per-WAN IPs from the legacy API; refresh occasionally.
+  // Per-WAN public IP discovery is deferred — the legacy /stat/health only
+  // exposes one entry without an ifname tying it to a specific interface.
   const wanIpsByIfName: Record<string, string | null> = {};
-  let wanIpsAt = 0;
-  async function refreshWanIps(): Promise<void> {
-    if (!unifiOk) return;
-    try {
-      const ips = await unifi.getWanIps();
-      for (const w of wans) {
-        if (ips[w.ifName]) wanIpsByIfName[w.ifName] = ips[w.ifName] ?? null;
-      }
-    } catch (err) {
-      console.error('[poller] wan ip refresh failed', err);
-    }
-  }
 
   // === Per-client rate computation (legacy API caches counters at ~30s, so
   //     we poll at 60s and derive rates from byte deltas). ===
@@ -185,12 +179,6 @@ export async function startPoller(): Promise<void> {
   // === Tick: SNMP every wanMs, legacy stuff on slower cadences ===
   const tick = async (): Promise<void> => {
     const now = Date.now();
-
-    // Refresh WAN IPs once a minute.
-    if (snmpOk && now - wanIpsAt >= 60_000) {
-      wanIpsAt = now;
-      void refreshWanIps();
-    }
 
     // SNMP: read counters, compute rates from previous reading.
     if (snmpOk) {
