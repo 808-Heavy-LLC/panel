@@ -118,6 +118,8 @@ export class UnifiClient {
   private csrfToken = '';
   private agent: Agent;
   private base: string;
+  /** Combined-id (cat<<16 | app) → human name. Loaded once at connect. */
+  private appCatalog: Map<number, string> = new Map();
 
   constructor(private opts: UnifiOpts) {
     this.agent = new Agent({
@@ -137,12 +139,55 @@ export class UnifiClient {
   async connect(): Promise<void> {
     if (this.mode === 'legacy') {
       await this.legacyLogin();
+      // Best-effort: load the app-name catalog so /api/snapshot can label
+      // top apps. Failure here doesn't block — apps fall back to "App N".
+      this.appCatalog = await this.fetchAppCatalog().catch((err) => {
+        console.error('[unifi] DPI catalog fetch failed:', err);
+        return new Map();
+      });
+      console.log(`[unifi] DPI catalog loaded: ${this.appCatalog.size} entries`);
     } else if (this.mode === 'integration') {
       // Probe sites endpoint to verify key works.
       await this.integrationGet('/proxy/network/integration/v1/sites');
     } else {
       throw new Error('No UDM credentials configured');
     }
+  }
+
+  /** Fetch the UniFi UI's `dynamic.dpi.js` and parse its
+   *  `<id>:{name:"..."}` entries. The asset path includes a hash that
+   *  changes per firmware build, so we discover it from the main HTML. */
+  private async fetchAppCatalog(): Promise<Map<number, string>> {
+    const html = await this.legacyGetText('/manage/');
+    const m = html.match(/angular\/([a-zA-Z0-9_-]+)\/js\/index\.js/);
+    if (!m) throw new Error('could not find angular asset hash in /manage/');
+    const js = await this.legacyGetText(`/manage/angular/${m[1]}/js/dynamic.dpi.js`);
+    const map = new Map<number, string>();
+    for (const entry of js.matchAll(/(\d+):\{name:"([^"]+)"/g)) {
+      const id = Number(entry[1]);
+      const name = entry[2]!;
+      // IDs < 65536 are categories; we only care about apps for top-app
+      // labeling. Categories overlap numerically with app sub-ids and would
+      // shadow real apps if added to the same map.
+      if (id >= 65536) map.set(id, name);
+    }
+    return map;
+  }
+
+  private async legacyGetText(path: string): Promise<string> {
+    const url = `${this.base}/proxy/network${path}`;
+    const doFetch = () =>
+      undiciFetch(url, {
+        headers: { cookie: this.cookie, 'x-csrf-token': this.csrfToken },
+        dispatcher: this.agent,
+      });
+    let res = await doFetch();
+    if (res.status === 401 || res.status === 403) {
+      await this.legacyLogin();
+      res = await doFetch();
+    }
+    if (!res.ok) throw new Error(`UDM GET ${path} failed: ${res.status}`);
+    return res.text();
   }
 
   private async legacyLogin(): Promise<void> {
@@ -256,20 +301,27 @@ export class UnifiClient {
       `/v2/api/site/${this.opts.site}/traffic?start=${start}&end=${end}&includeUnidentified=true`,
     );
     const apps = r.total_usage_by_app ?? [];
-    const byCat = new Map<number, number>();
-    for (const a of apps) {
-      const cat = a.category ?? 255;
-      const bytes = a.total_bytes ?? (a.bytes_received ?? 0) + (a.bytes_transmitted ?? 0);
-      byCat.set(cat, (byCat.get(cat) ?? 0) + bytes);
-    }
-    const total = [...byCat.values()].reduce((a, b) => a + b, 0);
-    return [...byCat.entries()]
-      .map(([cat, bytes]) => ({
-        id: String(cat),
-        name: dpiCatName(cat),
-        bytes,
-        pct: total > 0 ? bytes / total : 0,
-      }))
+    // Name lookup uses the combined id (cat<<16 | app) as the UI does.
+    const total = apps.reduce(
+      (acc, a) => acc + (a.total_bytes ?? (a.bytes_received ?? 0) + (a.bytes_transmitted ?? 0)),
+      0,
+    );
+    return apps
+      .map((a) => {
+        const cat = a.category ?? 255;
+        const app = a.application ?? 0;
+        const combined = (cat << 16) | app;
+        const bytes = a.total_bytes ?? (a.bytes_received ?? 0) + (a.bytes_transmitted ?? 0);
+        const name =
+          this.appCatalog.get(combined) ??
+          (cat === 255 ? 'Unidentified' : `${dpiCatName(cat)} · ${app}`);
+        return {
+          id: String(combined),
+          name,
+          bytes,
+          pct: total > 0 ? bytes / total : 0,
+        };
+      })
       .sort((a, b) => b.bytes - a.bytes);
   }
 

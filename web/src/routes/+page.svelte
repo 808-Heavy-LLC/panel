@@ -66,7 +66,7 @@
       {/snippet}
     </HudFrame>
 
-    <HudFrame label="TRAFFIC CATEGORIES" accent="primary">
+    <HudFrame label="TOP APPLICATIONS" accent="primary">
       {#snippet children()}
         <DpiPanel />
       {/snippet}
