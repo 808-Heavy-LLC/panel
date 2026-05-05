@@ -35,15 +35,18 @@ type RawClient = {
   last_seen?: number;
 };
 
-type RawDpiEntry = {
-  app?: number;
-  cat?: number;
-  rx_bytes?: number;
-  tx_bytes?: number;
+type RawTrafficApp = {
+  application?: number;
+  category?: number;
+  bytes_received?: number;
+  bytes_transmitted?: number;
+  total_bytes?: number;
+  client_count?: number;
 };
 
-type RawDpiByCat = {
-  by_cat?: Array<{ cat: number; rx_bytes: number; tx_bytes: number; apps?: RawDpiEntry[] }>;
+type RawTrafficResponse = {
+  total_usage_by_app?: RawTrafficApp[];
+  client_usage_by_app?: RawTrafficApp[];
 };
 
 type RawDevice = {
@@ -92,6 +95,8 @@ const DPI_CATEGORIES: Record<number, string> = {
   21: 'Business',
   22: 'Privacy',
   23: 'Remote Access',
+  24: 'Game Streaming',
+  255: 'Unidentified',
 };
 
 function dpiCatName(id: number): string {
@@ -242,21 +247,29 @@ export class UnifiClient {
 
   async getDpi(): Promise<DpiCategory[]> {
     if (this.mode !== 'legacy') return [];
-    const r = await this.legacyGet<{ data: RawDpiByCat[] }>(
-      `/api/s/${this.opts.site}/stat/dpi?type=by_cat`,
+    // UniFi Network 9.x retired /stat/dpi (still 200s but always empty).
+    // The dashboard now reads from /v2/.../traffic, which expects ms-precision
+    // timestamps and an explicit window. 24h matches what the UI's "1D" shows.
+    const end = Date.now();
+    const start = end - 24 * 60 * 60 * 1000;
+    const r = await this.legacyGet<RawTrafficResponse>(
+      `/v2/api/site/${this.opts.site}/traffic?start=${start}&end=${end}&includeUnidentified=true`,
     );
-    const cats = r.data?.[0]?.by_cat ?? [];
-    const total = cats.reduce((acc, c) => acc + (c.rx_bytes ?? 0) + (c.tx_bytes ?? 0), 0);
-    return cats
-      .map((c) => {
-        const bytes = (c.rx_bytes ?? 0) + (c.tx_bytes ?? 0);
-        return {
-          id: String(c.cat),
-          name: dpiCatName(c.cat),
-          bytes,
-          pct: total > 0 ? bytes / total : 0,
-        };
-      })
+    const apps = r.total_usage_by_app ?? [];
+    const byCat = new Map<number, number>();
+    for (const a of apps) {
+      const cat = a.category ?? 255;
+      const bytes = a.total_bytes ?? (a.bytes_received ?? 0) + (a.bytes_transmitted ?? 0);
+      byCat.set(cat, (byCat.get(cat) ?? 0) + bytes);
+    }
+    const total = [...byCat.values()].reduce((a, b) => a + b, 0);
+    return [...byCat.entries()]
+      .map(([cat, bytes]) => ({
+        id: String(cat),
+        name: dpiCatName(cat),
+        bytes,
+        pct: total > 0 ? bytes / total : 0,
+      }))
       .sort((a, b) => b.bytes - a.bytes);
   }
 
