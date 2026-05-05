@@ -1,12 +1,16 @@
-export type WanStats = {
+export type Wan = {
+  id: string;
+  ifIndex: number;
+  ifName: string;
+  label: string;
+  speedBitsPerSec: number;
   rxBps: number;
   txBps: number;
   rxTotal: number;
   txTotal: number;
-  latencyMs: number | null;
   wanIp: string | null;
-  status: 'ok' | 'warning' | 'error' | 'unknown';
-  uptimeSec: number | null;
+  status: 'ok' | 'down' | 'unknown';
+  latencyMs: number | null;
 };
 
 export type WanSample = {
@@ -52,18 +56,18 @@ export type Snapshot = {
   ts: number;
   source: 'live' | 'mock';
   serverUptimeSec: number;
-  wan: WanStats;
+  wans: Wan[];
+  histories: Record<string, WanSample[]>;
   clients: ClientStat[];
   dpi: DpiCategory[];
   udm: UdmInfo | null;
-  history: WanSample[];
-  features: { dpiAvailable: boolean; perClientRates: boolean };
+  features: { dpiAvailable: boolean; perClientRates: boolean; snmpAvailable: boolean };
 };
 
 export type Tick = {
   ts: number;
-  wan: WanStats;
-  sample: WanSample;
+  wans: Wan[];
+  samples: Array<{ id: string; rxBps: number; txBps: number }>;
   clients?: ClientStat[];
   dpi?: DpiCategory[];
   udm?: UdmInfo;

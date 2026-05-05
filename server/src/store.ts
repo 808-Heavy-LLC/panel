@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import type { ClientStat, DpiCategory, Snapshot, Tick, UdmInfo, WanSample, WanStats } from './types.js';
+import type { ClientStat, DpiCategory, Snapshot, Tick, UdmInfo, Wan, WanSample } from './types.js';
 
 type Listener = (tick: Tick) => void;
 
@@ -7,21 +7,12 @@ const startTs = Date.now();
 
 const state = {
   source: 'mock' as 'live' | 'mock',
-  wan: {
-    rxBps: 0,
-    txBps: 0,
-    rxTotal: 0,
-    txTotal: 0,
-    latencyMs: null,
-    wanIp: null,
-    status: 'unknown',
-    uptimeSec: null,
-  } as WanStats,
+  wans: [] as Wan[],
+  histories: {} as Record<string, WanSample[]>,
   clients: [] as ClientStat[],
   dpi: [] as DpiCategory[],
   udm: null as UdmInfo | null,
-  history: [] as WanSample[],
-  features: { dpiAvailable: false, perClientRates: false },
+  features: { dpiAvailable: false, perClientRates: false, snmpAvailable: false },
 };
 
 const listeners = new Set<Listener>();
@@ -36,27 +27,33 @@ export const store = {
   },
 
   pushTick(input: {
-    wan: WanStats;
+    wans: Wan[];
     clients?: ClientStat[];
     dpi?: DpiCategory[];
     udm?: UdmInfo;
   }): void {
     const ts = Date.now();
-    state.wan = input.wan;
+    state.wans = input.wans;
     if (input.clients) state.clients = input.clients;
     if (input.dpi) state.dpi = input.dpi;
     if (input.udm) state.udm = input.udm;
 
-    const sample: WanSample = { ts, rxBps: input.wan.rxBps, txBps: input.wan.txBps };
-    state.history.push(sample);
-    if (state.history.length > config.history.maxSamples) {
-      state.history.splice(0, state.history.length - config.history.maxSamples);
+    const samples: Tick['samples'] = [];
+    for (const w of input.wans) {
+      const sample: WanSample = { ts, rxBps: w.rxBps, txBps: w.txBps };
+      const hist = state.histories[w.id] ?? [];
+      hist.push(sample);
+      if (hist.length > config.history.maxSamples) {
+        hist.splice(0, hist.length - config.history.maxSamples);
+      }
+      state.histories[w.id] = hist;
+      samples.push({ id: w.id, rxBps: w.rxBps, txBps: w.txBps });
     }
 
     const tick: Tick = {
       ts,
-      wan: input.wan,
-      sample,
+      wans: input.wans,
+      samples,
       ...(input.clients ? { clients: input.clients } : {}),
       ...(input.dpi ? { dpi: input.dpi } : {}),
       ...(input.udm ? { udm: input.udm } : {}),
@@ -76,11 +73,11 @@ export const store = {
       ts: Date.now(),
       source: state.source,
       serverUptimeSec: Math.floor((Date.now() - startTs) / 1000),
-      wan: state.wan,
+      wans: state.wans,
+      histories: Object.fromEntries(Object.entries(state.histories).map(([k, v]) => [k, v.slice()])),
       clients: state.clients,
       dpi: state.dpi,
       udm: state.udm,
-      history: state.history.slice(),
       features: { ...state.features },
     };
   },

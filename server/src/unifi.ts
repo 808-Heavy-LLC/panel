@@ -1,5 +1,5 @@
 import { Agent, fetch as undiciFetch } from 'undici';
-import type { ClientStat, DpiCategory, UdmInfo, WanStats } from './types.js';
+import type { ClientStat, DpiCategory, UdmInfo } from './types.js';
 
 type Mode = 'legacy' | 'integration' | 'none';
 
@@ -190,41 +190,6 @@ export class UnifiClient {
     return (await res.json()) as T;
   }
 
-  async getWan(): Promise<WanStats> {
-    if (this.mode === 'legacy') {
-      const r = await this.legacyGet<{ data: RawHealth[] }>(`/api/s/${this.opts.site}/stat/health`);
-      const wan = r.data?.find((d) => d.subsystem === 'wan') ?? {};
-      return {
-        rxBps: wan['rx_bytes-r'] ?? 0,
-        txBps: wan['tx_bytes-r'] ?? 0,
-        rxTotal: wan.rx_bytes ?? 0,
-        txTotal: wan.tx_bytes ?? 0,
-        latencyMs: wan.latency ?? null,
-        wanIp: wan.wan_ip ?? null,
-        status:
-          wan.status === 'ok'
-            ? 'ok'
-            : wan.status === 'warning'
-              ? 'warning'
-              : wan.status === 'error'
-                ? 'error'
-                : 'unknown',
-        uptimeSec: wan.uptime ?? null,
-      };
-    }
-    // Integration mode: no WAN rate exposed. Return zeros + status.
-    return {
-      rxBps: 0,
-      txBps: 0,
-      rxTotal: 0,
-      txTotal: 0,
-      latencyMs: null,
-      wanIp: null,
-      status: 'unknown',
-      uptimeSec: null,
-    };
-  }
-
   async getClients(): Promise<ClientStat[]> {
     if (this.mode === 'legacy') {
       const r = await this.legacyGet<{ data: RawClient[] }>(`/api/s/${this.opts.site}/stat/sta`);
@@ -283,6 +248,25 @@ export class UnifiClient {
         };
       })
       .sort((a, b) => b.bytes - a.bytes);
+  }
+
+  /** Map of ifName ('eth9') → public WAN IP. Sources from /stat/health. */
+  async getWanIps(): Promise<Record<string, string>> {
+    if (this.mode !== 'legacy') return {};
+    try {
+      const r = await this.legacyGet<{ data: Array<{ subsystem?: string; wan_ip?: string; ifname?: string }> }>(
+        `/api/s/${this.opts.site}/stat/health`,
+      );
+      const out: Record<string, string> = {};
+      for (const d of r.data ?? []) {
+        if (d.subsystem === 'wan' || d.subsystem === 'wan2') {
+          if (d.ifname && d.wan_ip) out[d.ifname] = d.wan_ip;
+        }
+      }
+      return out;
+    } catch {
+      return {};
+    }
   }
 
   async getUdmInfo(): Promise<UdmInfo | null> {

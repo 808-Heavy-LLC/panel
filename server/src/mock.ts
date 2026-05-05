@@ -1,4 +1,4 @@
-import type { ClientStat, DpiCategory, UdmInfo, WanStats } from './types.js';
+import type { ClientStat, DpiCategory, UdmInfo, Wan } from './types.js';
 
 const CLIENT_FIXTURES = [
   { name: 'tv-livingroom', isWired: true, baseDown: 35_000_000, baseUp: 800_000 },
@@ -30,8 +30,11 @@ const DPI_FIXTURES = [
   { name: 'Update Tools', weight: 2 },
 ];
 
-let totalRx = 1_200_000_000_000;
-let totalTx = 180_000_000_000;
+type WanState = { rxTotal: number; txTotal: number; phaseOffset: number; baseRx: number; baseTx: number; ifName: string; ip: string };
+const WANS: WanState[] = [
+  { rxTotal: 1_200_000_000_000, txTotal: 180_000_000_000, phaseOffset: 0, baseRx: 60_000_000, baseTx: 4_000_000, ifName: 'eth9', ip: '203.0.113.42' },
+  { rxTotal: 600_000_000_000, txTotal: 80_000_000_000, phaseOffset: 3.7, baseRx: 28_000_000, baseTx: 2_000_000, ifName: 'eth10', ip: '198.51.100.7' },
+];
 let phase = 0;
 
 function noise(amp: number): number {
@@ -39,27 +42,32 @@ function noise(amp: number): number {
 }
 
 function envelope(t: number): number {
-  // Simulate a rolling activity pattern: combination of sine waves
   return 0.65 + 0.25 * Math.sin(t / 9.7) + 0.15 * Math.sin(t / 3.3 + 1.1) + 0.1 * Math.sin(t / 1.7);
 }
 
-export function mockWan(intervalMs = 2000): WanStats {
+export function mockWans(intervalMs = 2000): Wan[] {
   phase += intervalMs / 1000;
-  const env = envelope(phase);
-  const rx = Math.max(0, 60_000_000 * env + noise(15_000_000));
-  const tx = Math.max(0, 4_000_000 * env + noise(800_000));
-  totalRx += (rx * intervalMs) / 1000;
-  totalTx += (tx * intervalMs) / 1000;
-  return {
-    rxBps: rx,
-    txBps: tx,
-    rxTotal: totalRx,
-    txTotal: totalTx,
-    latencyMs: 6 + Math.random() * 6,
-    wanIp: '203.0.113.42',
-    status: 'ok',
-    uptimeSec: 1_234_567 + Math.floor(phase),
-  };
+  return WANS.map((w, i) => {
+    const env = envelope(phase + w.phaseOffset);
+    const rx = Math.max(0, w.baseRx * env + noise(w.baseRx * 0.25));
+    const tx = Math.max(0, w.baseTx * env + noise(w.baseTx * 0.25));
+    w.rxTotal += (rx * intervalMs) / 1000;
+    w.txTotal += (tx * intervalMs) / 1000;
+    return {
+      id: `wan${i + 1}`,
+      ifIndex: i + 3,
+      ifName: w.ifName,
+      label: `WAN ${i + 1}`,
+      speedBitsPerSec: 10_000_000_000,
+      rxBps: rx,
+      txBps: tx,
+      rxTotal: w.rxTotal,
+      txTotal: w.txTotal,
+      wanIp: w.ip,
+      status: 'ok',
+      latencyMs: 6 + Math.random() * 6 + i * 4,
+    };
+  });
 }
 
 export function mockClients(): ClientStat[] {

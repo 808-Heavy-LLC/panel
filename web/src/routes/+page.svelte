@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { connectWs } from '$lib/store.svelte';
+  import { connectWs, panel } from '$lib/store.svelte';
   import { theme } from '$lib/theme.svelte';
   import HudHeader from '$lib/components/HudHeader.svelte';
   import HudFrame from '$lib/components/HudFrame.svelte';
@@ -35,7 +35,21 @@
         <span>WINDOW · 90s</span>
       {/snippet}
       {#snippet children()}
-        <BandwidthChart />
+        <div class="flex h-full flex-col gap-3">
+          {#each panel.wans as wan (wan.id)}
+            <div class="min-h-0 flex-1">
+              <BandwidthChart wanId={wan.id} />
+            </div>
+            {#if wan.id !== panel.wans[panel.wans.length - 1]?.id}
+              <div class="border-t border-[var(--c-line)]"></div>
+            {/if}
+          {/each}
+          {#if panel.wans.length === 0}
+            <div class="grid h-full place-items-center text-[11px] uppercase tracking-widest text-[var(--c-text-dim)]">
+              Awaiting WAN data…
+            </div>
+          {/if}
+        </div>
       {/snippet}
     </HudFrame>
 

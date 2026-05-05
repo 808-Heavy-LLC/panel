@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { panel } from '$lib/store.svelte';
-  import { formatClock, formatDate, formatUptime } from '$lib/format';
+  import { formatBps, formatClock, formatDate, formatUptime } from '$lib/format';
 
   let now = $state(new Date());
 
@@ -10,17 +10,17 @@
     return () => clearInterval(id);
   });
 
-  const wanStatus = $derived(panel.wan.status);
+  const totalRx = $derived(formatBps(panel.totalRxBps()));
+  const totalTx = $derived(formatBps(panel.totalTxBps()));
+
   const connClass = $derived.by(() => {
     if (panel.connection !== 'open') return 'err';
-    if (wanStatus === 'warning') return 'warn';
-    if (wanStatus === 'error') return 'err';
     return '';
   });
   const connLabel = $derived.by(() => {
     if (panel.connection !== 'open') return panel.connection.toUpperCase();
     if (panel.source === 'mock') return 'MOCK FEED';
-    return 'LIVE';
+    return panel.features.snmpAvailable ? 'LIVE · SNMP' : 'LIVE';
   });
 </script>
 
@@ -45,6 +45,19 @@
   <div class="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[var(--c-text-dim)]">
     <span class="hud-pulse-dot {connClass}"></span>
     <span>{connLabel}</span>
+  </div>
+
+  <div class="flex items-baseline gap-4 text-[10px] uppercase tracking-widest text-[var(--c-text-dim)]">
+    <span>
+      <span style="color: var(--c-primary);">▼</span>
+      <span class="hud-value-primary font-display text-[16px] leading-none">{totalRx.value}</span>
+      <span>{totalRx.unit}</span>
+    </span>
+    <span>
+      <span style="color: var(--c-secondary);">▲</span>
+      <span class="hud-value-secondary font-display text-[16px] leading-none">{totalTx.value}</span>
+      <span>{totalTx.unit}</span>
+    </span>
   </div>
 
   <div class="flex-1"></div>

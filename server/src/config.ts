@@ -52,6 +52,18 @@ export const config = {
     site: process.env.UDM_SITE ?? 'default',
     insecureTls: bool(process.env.UDM_INSECURE_TLS, true),
   },
+  snmp: {
+    community: process.env.UDM_SNMP_COMMUNITY ?? 'public',
+    port: num(process.env.UDM_SNMP_PORT, 161),
+    wanIfIndexes: (process.env.UDM_WAN_IFINDEXES ?? '')
+      .split(',')
+      .map((s) => Number.parseInt(s.trim(), 10))
+      .filter((n) => Number.isFinite(n) && n > 0),
+    wanLabels: (process.env.UDM_WAN_LABELS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
+  },
   poll: {
     wanMs: num(process.env.PANEL_POLL_WAN_MS, 2000),
     // UDM controller caches /stat/sta responses for ~30s, so polling at

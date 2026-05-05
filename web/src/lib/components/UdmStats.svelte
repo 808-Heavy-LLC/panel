@@ -8,8 +8,8 @@
   const temp = $derived(panel.udm?.tempC ?? null);
   const onlineCount = $derived(panel.clients.length);
   const wiredCount = $derived(panel.clients.filter((c) => c.isWired).length);
-  const totalDown = $derived(formatBytes(panel.wan.rxTotal));
-  const totalUp = $derived(formatBytes(panel.wan.txTotal));
+  const totalDown = $derived(formatBytes(panel.wans.reduce((a, w) => a + w.rxTotal, 0)));
+  const totalUp = $derived(formatBytes(panel.wans.reduce((a, w) => a + w.txTotal, 0)));
 </script>
 
 <div class="grid grid-cols-2 gap-3">

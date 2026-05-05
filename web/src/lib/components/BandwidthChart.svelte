@@ -4,6 +4,9 @@
   import { theme, cssColor } from '$lib/theme.svelte';
   import { formatBps } from '$lib/format';
 
+  type Props = { wanId: string };
+  let { wanId }: Props = $props();
+
   const WINDOW_MS = 90_000;
 
   let canvas: HTMLCanvasElement;
@@ -13,7 +16,6 @@
   let cssW = 0;
   let cssH = 0;
 
-  // Cached colors, refreshed on theme change.
   let colorPrimary = '#00d9ff';
   let colorSecondary = '#ffb000';
   let colorLine = 'rgba(42, 66, 88, 0.35)';
@@ -70,10 +72,9 @@
     ctx.stroke();
     ctx.globalAlpha = 1;
 
-    const samples = panel.history;
+    const samples = panel.histories[wanId] ?? [];
     if (samples.length < 2) return;
 
-    const tMax = now;
     const tMin = now - WINDOW_MS;
 
     let peak = 1;
@@ -157,7 +158,6 @@
   }
 
   function colorWithAlpha(color: string, alpha: number): string {
-    // Accepts #rgb / #rrggbb / rgb()/rgba()
     const c = color.trim();
     if (c.startsWith('#')) {
       const hex = c.length === 4 ? c.replace(/#(.)(.)(.)/, '#$1$1$2$2$3$3') : c;
@@ -191,29 +191,31 @@
     };
   });
 
-  const rx = $derived(formatBps(panel.wan.rxBps));
-  const tx = $derived(formatBps(panel.wan.txBps));
-  const lat = $derived(panel.wan.latencyMs);
+  const wan = $derived(panel.wans.find((w) => w.id === wanId));
+  const rx = $derived(wan ? formatBps(wan.rxBps) : { value: '0', unit: 'bps' });
+  const tx = $derived(wan ? formatBps(wan.txBps) : { value: '0', unit: 'bps' });
 </script>
 
-<div class="flex h-full flex-col gap-3">
-  <div class="grid grid-cols-3 gap-4 text-[10px] uppercase tracking-widest text-[var(--c-text-dim)]">
-    <div class="flex items-baseline gap-2">
-      <span style="color: var(--c-primary);">▼ DOWN</span>
-      <span class="hud-value-primary font-display text-[24px] leading-none">{rx.value}</span>
-      <span>{rx.unit}</span>
+<div class="flex h-full flex-col gap-2">
+  <div class="flex items-baseline justify-between gap-3 text-[10px] uppercase tracking-widest text-[var(--c-text-dim)]">
+    <div class="flex items-baseline gap-3 min-w-0">
+      <span class="hud-label text-[11px]" style="color: var(--c-primary);">{wan?.label ?? wanId}</span>
+      <span class="text-[var(--c-text)] truncate">{wan?.ifName ?? ''}</span>
+      {#if wan?.wanIp}
+        <span class="text-[var(--c-text-dim)] truncate">{wan.wanIp}</span>
+      {/if}
     </div>
-    <div class="flex items-baseline gap-2">
-      <span style="color: var(--c-secondary);">▲ UP</span>
-      <span class="hud-value-secondary font-display text-[24px] leading-none">{tx.value}</span>
-      <span>{tx.unit}</span>
-    </div>
-    <div class="flex items-baseline justify-end gap-2">
-      <span>LATENCY</span>
-      <span class="font-display text-[18px] leading-none text-[var(--c-text-bright)]">
-        {lat !== null ? lat.toFixed(0) : '—'}
+    <div class="flex items-baseline gap-4 whitespace-nowrap">
+      <span>
+        <span style="color: var(--c-primary);">▼</span>
+        <span class="hud-value-primary font-display text-[18px] leading-none">{rx.value}</span>
+        <span>{rx.unit}</span>
       </span>
-      <span>ms</span>
+      <span>
+        <span style="color: var(--c-secondary);">▲</span>
+        <span class="hud-value-secondary font-display text-[18px] leading-none">{tx.value}</span>
+        <span>{tx.unit}</span>
+      </span>
     </div>
   </div>
 

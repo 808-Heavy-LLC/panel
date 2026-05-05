@@ -1,53 +1,65 @@
-import type { ClientStat, DpiCategory, Snapshot, Tick, UdmInfo, WanSample, WanStats, WsMessage } from './types.js';
+import type {
+  ClientStat,
+  DpiCategory,
+  Snapshot,
+  Tick,
+  UdmInfo,
+  Wan,
+  WanSample,
+  WsMessage,
+} from './types.js';
 
 type ConnectionState = 'connecting' | 'open' | 'closed' | 'error';
 
 const MAX_HISTORY = 240;
 
-function emptyWan(): WanStats {
-  return {
-    rxBps: 0,
-    txBps: 0,
-    rxTotal: 0,
-    txTotal: 0,
-    latencyMs: null,
-    wanIp: null,
-    status: 'unknown',
-    uptimeSec: null,
-  };
-}
-
 class PanelStore {
   connection = $state<ConnectionState>('connecting');
   source = $state<'live' | 'mock'>('mock');
   serverUptimeSec = $state(0);
-  wan = $state<WanStats>(emptyWan());
+  wans = $state<Wan[]>([]);
+  histories = $state<Record<string, WanSample[]>>({});
   clients = $state<ClientStat[]>([]);
   dpi = $state<DpiCategory[]>([]);
   udm = $state<UdmInfo | null>(null);
-  history = $state<WanSample[]>([]);
-  features = $state({ dpiAvailable: false, perClientRates: false });
+  features = $state({ dpiAvailable: false, perClientRates: false, snmpAvailable: false });
   lastTickAt = $state(0);
 
   applySnapshot(s: Snapshot): void {
     this.source = s.source;
     this.serverUptimeSec = s.serverUptimeSec;
-    this.wan = s.wan;
+    this.wans = s.wans;
+    const trimmed: Record<string, WanSample[]> = {};
+    for (const [k, v] of Object.entries(s.histories)) trimmed[k] = v.slice(-MAX_HISTORY);
+    this.histories = trimmed;
     this.clients = s.clients;
     this.dpi = s.dpi;
     this.udm = s.udm;
-    this.history = s.history.slice(-MAX_HISTORY);
     this.features = s.features;
     this.lastTickAt = s.ts;
   }
 
   applyTick(t: Tick): void {
-    this.wan = t.wan;
+    this.wans = t.wans;
     if (t.clients) this.clients = t.clients;
     if (t.dpi) this.dpi = t.dpi;
     if (t.udm) this.udm = t.udm;
-    this.history = [...this.history, t.sample].slice(-MAX_HISTORY);
+    const next = { ...this.histories };
+    for (const s of t.samples) {
+      const cur = next[s.id] ?? [];
+      const updated = [...cur, { ts: t.ts, rxBps: s.rxBps, txBps: s.txBps }];
+      next[s.id] = updated.length > MAX_HISTORY ? updated.slice(-MAX_HISTORY) : updated;
+    }
+    this.histories = next;
     this.lastTickAt = t.ts;
+  }
+
+  /** Aggregate current WAN throughput across all interfaces. */
+  totalRxBps(): number {
+    return this.wans.reduce((a, w) => a + w.rxBps, 0);
+  }
+  totalTxBps(): number {
+    return this.wans.reduce((a, w) => a + w.txBps, 0);
   }
 }
 
