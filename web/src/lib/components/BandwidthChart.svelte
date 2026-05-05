@@ -141,8 +141,10 @@
     for (const s of samples) ctx.lineTo(xOf(s.ts), yOf(pick(s)));
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
-    ctx.shadowBlur = 8 * glowMult;
-    ctx.shadowColor = color;
+    if (glowMult > 0.4) {
+      ctx.shadowBlur = 6 * glowMult;
+      ctx.shadowColor = color;
+    }
     ctx.stroke();
     ctx.shadowBlur = 0;
   }
@@ -151,8 +153,10 @@
     ctx.beginPath();
     ctx.arc(x, y, 3, 0, Math.PI * 2);
     ctx.fillStyle = color;
-    ctx.shadowBlur = 10 * glowMult;
-    ctx.shadowColor = color;
+    if (glowMult > 0.4) {
+      ctx.shadowBlur = 8 * glowMult;
+      ctx.shadowColor = color;
+    }
     ctx.fill();
     ctx.shadowBlur = 0;
   }
@@ -174,17 +178,25 @@
     return c;
   }
 
+  // Cap chart redraws at ~24fps. The data updates every 2s anyway, so
+  // higher framerates burn Pi GPU cycles for almost no visual benefit.
+  const TARGET_FPS = 24;
+  const FRAME_MIN_MS = 1000 / TARGET_FPS;
+  let lastFrameTs = 0;
+
   onMount(() => {
     refreshColors();
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(container);
 
-    const loop = () => {
-      draw(Date.now());
+    const loop = (ts: number) => {
       raf = requestAnimationFrame(loop);
+      if (ts - lastFrameTs < FRAME_MIN_MS) return;
+      lastFrameTs = ts;
+      draw(Date.now());
     };
-    loop();
+    raf = requestAnimationFrame(loop);
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();

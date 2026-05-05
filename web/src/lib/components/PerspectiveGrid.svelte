@@ -6,7 +6,6 @@
 <div class="grid-stage" class:active>
   <div class="horizon-glow"></div>
   <div class="grid-floor"></div>
-  <div class="grid-ceiling"></div>
 </div>
 
 <style>
@@ -28,46 +27,32 @@
     left: 0;
     right: 0;
     top: 50%;
-    height: 2px;
+    height: 1px;
     background: linear-gradient(90deg, transparent, var(--c-primary), var(--c-secondary), transparent);
     box-shadow:
-      0 0 24px var(--c-primary),
-      0 0 48px var(--c-secondary);
+      0 0 16px var(--c-primary),
+      0 0 28px var(--c-secondary);
     transform: translateY(-1px);
-    opacity: 0.7;
-  }
-
-  .grid-floor,
-  .grid-ceiling {
-    position: absolute;
-    left: 50%;
-    width: 300vw;
-    height: 60vh;
-    transform-origin: top center;
-    background-image:
-      linear-gradient(to right, color-mix(in oklab, var(--c-secondary) 60%, transparent) 1px, transparent 1px),
-      linear-gradient(to bottom, color-mix(in oklab, var(--c-primary) 70%, transparent) 1px, transparent 1px);
-    background-size: 80px 80px;
-    will-change: background-position;
+    opacity: 0.6;
   }
 
   .grid-floor {
+    position: absolute;
     top: 50%;
-    transform: translateX(-50%) perspective(420px) rotateX(70deg);
-    animation: grid-pull 4s linear infinite;
-    opacity: 0.85;
-    mask-image: linear-gradient(to bottom, color-mix(in oklab, black 100%, transparent) 0%, transparent 90%);
-    -webkit-mask-image: linear-gradient(to bottom, color-mix(in oklab, black 100%, transparent) 0%, transparent 90%);
-  }
-
-  .grid-ceiling {
-    bottom: 50%;
-    transform: translateX(-50%) perspective(420px) rotateX(-70deg);
-    transform-origin: bottom center;
-    animation: grid-push 4s linear infinite;
-    opacity: 0.6;
-    mask-image: linear-gradient(to top, color-mix(in oklab, black 100%, transparent) 0%, transparent 90%);
-    -webkit-mask-image: linear-gradient(to top, color-mix(in oklab, black 100%, transparent) 0%, transparent 90%);
+    left: 50%;
+    width: 200vw;
+    height: 50vh;
+    transform: translateX(-50%) perspective(500px) rotateX(72deg);
+    transform-origin: top center;
+    background-image:
+      linear-gradient(to right, color-mix(in oklab, var(--c-secondary) 50%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklab, var(--c-primary) 60%, transparent) 1px, transparent 1px);
+    background-size: 100px 100px;
+    animation: grid-pull 12s linear infinite;
+    will-change: background-position;
+    opacity: 0.55;
+    mask-image: linear-gradient(to bottom, color-mix(in oklab, black 100%, transparent) 0%, transparent 92%);
+    -webkit-mask-image: linear-gradient(to bottom, color-mix(in oklab, black 100%, transparent) 0%, transparent 92%);
   }
 
   @keyframes grid-pull {
@@ -75,15 +60,13 @@
       background-position: 0 0;
     }
     to {
-      background-position: 0 80px;
+      background-position: 0 100px;
     }
   }
-  @keyframes grid-push {
-    from {
-      background-position: 0 0;
-    }
-    to {
-      background-position: 0 -80px;
+
+  @media (prefers-reduced-motion: reduce) {
+    .grid-floor {
+      animation: none;
     }
   }
 </style>

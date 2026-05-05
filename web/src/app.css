@@ -54,7 +54,7 @@
 
   --frame-corner: 14px;
   --frame-border-blend: linear-gradient(135deg, var(--c-primary) 0%, var(--c-line-bright) 30%, var(--c-line-bright) 70%, var(--c-secondary) 100%);
-  --glow-mult: 1;
+  --glow-mult: 0.7;
 
   --bg-radial-1: radial-gradient(ellipse at top, color-mix(in oklab, var(--c-primary) 6%, transparent), transparent 60%);
   --bg-radial-2: radial-gradient(ellipse at bottom right, color-mix(in oklab, var(--c-secondary) 4%, transparent), transparent 60%);
@@ -97,7 +97,7 @@
 
   --frame-corner: 18px;
   --frame-border-blend: linear-gradient(135deg, var(--c-primary) 0%, var(--c-secondary) 50%, var(--c-primary) 100%);
-  --glow-mult: 1.8;
+  --glow-mult: 1;
 
   --bg-radial-1: radial-gradient(ellipse 80% 60% at 50% 100%, color-mix(in oklab, var(--c-secondary) 22%, transparent), transparent 70%);
   --bg-radial-2: radial-gradient(ellipse 100% 50% at 50% 0%, color-mix(in oklab, var(--c-primary) 10%, transparent), transparent 60%);
@@ -140,7 +140,7 @@
 
   --frame-corner: 0px;
   --frame-border-blend: linear-gradient(180deg, var(--c-line-bright), var(--c-line-bright));
-  --glow-mult: 0.4;
+  --glow-mult: 0.3;
 
   --bg-radial-1: radial-gradient(ellipse at top, color-mix(in oklab, var(--c-primary) 3%, transparent), transparent 70%);
   --bg-radial-2: none;
@@ -183,7 +183,7 @@
 
   --frame-corner: 0px;
   --frame-border-blend: linear-gradient(180deg, var(--c-primary), var(--c-secondary));
-  --glow-mult: 1.2;
+  --glow-mult: 0.7;
 
   --bg-radial-1: radial-gradient(ellipse at center, color-mix(in oklab, var(--c-primary) 4%, transparent), transparent 65%);
   --bg-radial-2: none;
@@ -457,38 +457,12 @@ body {
   background: linear-gradient(
     90deg,
     transparent,
-    color-mix(in oklab, var(--c-primary) 18%, transparent),
+    color-mix(in oklab, var(--c-primary) 14%, transparent),
     transparent
   );
-  animation: hud-sweep 4s linear infinite;
+  animation: hud-sweep 9s linear infinite;
   pointer-events: none;
-}
-
-/* ============================================================
-   Cyberpunk: occasional rgb-shift glitch on whole UI
-   ============================================================ */
-
-@keyframes cyber-glitch {
-  0%, 96%, 100% {
-    transform: translate(0, 0);
-    filter: none;
-  }
-  96.5% {
-    transform: translate(-2px, 1px);
-    filter: hue-rotate(-15deg) saturate(1.4);
-  }
-  97% {
-    transform: translate(2px, -1px);
-    filter: hue-rotate(15deg) saturate(1.4);
-  }
-  97.5% {
-    transform: translate(-1px, 0);
-    filter: none;
-  }
-}
-
-[data-theme='cyberpunk'] .panel-root {
-  animation: cyber-glitch 11s linear infinite;
+  will-change: transform;
 }
 
 /* ============================================================
@@ -500,4 +474,16 @@ body {
 }
 [data-theme='mission-control'] .hud-noise {
   display: none;
+}
+
+/* ============================================================
+   Honor prefers-reduced-motion globally
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-sweep::after,
+  .hud-flicker,
+  .hud-pulse-dot {
+    animation: none !important;
+  }
 }

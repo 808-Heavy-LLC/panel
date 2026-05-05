@@ -9,9 +9,9 @@
   let cssH = 0;
   let drops: number[] = [];
   let lastFrame = 0;
-  const FPS = 22;
+  const FPS = 16;
   const FRAME_MS = 1000 / FPS;
-  const FONT_SIZE = 16;
+  const FONT_SIZE = 18;
   const CHARS = 'ｦｧｨｩｪｫｬｭｮｯｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉ0123456789ABCDEF<>{}[]/\\';
 
   let active = $derived(theme.current === 'matrix');
