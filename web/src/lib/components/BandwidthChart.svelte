@@ -139,7 +139,7 @@
     ctx.beginPath();
     ctx.moveTo(first[0], cssH);
     ctx.lineTo(first[0], first[1]);
-    catmullRomSegments(ctx, pts);
+    smoothSegments(ctx, pts);
     ctx.lineTo(last[0], cssH);
     ctx.closePath();
     const grad = ctx.createLinearGradient(0, 0, 0, cssH);
@@ -150,7 +150,7 @@
 
     ctx.beginPath();
     ctx.moveTo(first[0], first[1]);
-    catmullRomSegments(ctx, pts);
+    smoothSegments(ctx, pts);
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
     if (glowMult > 0.4) {
@@ -161,18 +161,43 @@
     ctx.shadowBlur = 0;
   }
 
-  // Connect points with cubic Beziers using Catmull-Rom control points
-  // (tension 0.5). Mirrors the endpoints so the curve stays anchored.
-  function catmullRomSegments(ctx: CanvasRenderingContext2D, pts: [number, number][]): void {
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[i - 1] ?? pts[i]!;
+  // Monotonic cubic Hermite (Fritsch-Carlson). Connects points with cubic
+  // Beziers using a per-point tangent that's the harmonic mean of the two
+  // adjacent secant slopes, dropped to zero at local extrema. Guarantees
+  // the curve never overshoots the source points — no shark fins on bursty
+  // traffic spikes the way uniform Catmull-Rom produced.
+  function smoothSegments(ctx: CanvasRenderingContext2D, pts: [number, number][]): void {
+    const n = pts.length;
+    if (n < 2) return;
+
+    const m: number[] = [];
+    for (let i = 0; i < n - 1; i++) {
+      const dx = pts[i + 1]![0] - pts[i]![0];
+      const dy = pts[i + 1]![1] - pts[i]![1];
+      m.push(dx !== 0 ? dy / dx : 0);
+    }
+
+    const t: number[] = new Array(n).fill(0);
+    for (let i = 1; i < n - 1; i++) {
+      const ml = m[i - 1]!;
+      const mr = m[i]!;
+      // Sign change or zero → local extremum → flat tangent (no overshoot).
+      // Otherwise weighted harmonic mean keeps the slope between the two
+      // secants, so the curve stays bounded by adjacent samples.
+      if (ml * mr > 0) t[i] = (2 * ml * mr) / (ml + mr);
+    }
+    // Endpoints: enter and exit flat. The leading edge sits past the right
+    // edge of the canvas thanks to RENDER_DELAY_MS, so the flat exit isn't
+    // visible.
+
+    for (let i = 0; i < n - 1; i++) {
       const p1 = pts[i]!;
       const p2 = pts[i + 1]!;
-      const p3 = pts[i + 2] ?? p2;
-      const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
-      const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
-      const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
-      const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+      const dx = p2[0] - p1[0];
+      const cp1x = p1[0] + dx / 3;
+      const cp1y = p1[1] + (t[i]! * dx) / 3;
+      const cp2x = p2[0] - dx / 3;
+      const cp2y = p2[1] - (t[i + 1]! * dx) / 3;
       ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2[0], p2[1]);
     }
   }
