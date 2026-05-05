@@ -3,14 +3,13 @@
   type Props = {
     label?: string;
     accent?: Accent;
-    sweep?: boolean;
     children: import('svelte').Snippet;
     actions?: import('svelte').Snippet;
   };
-  let { label, accent = 'primary', sweep = false, children, actions }: Props = $props();
+  let { label, accent = 'primary', children, actions }: Props = $props();
 </script>
 
-<div class="hud-frame relative flex h-full w-full flex-col p-4" class:hud-sweep={sweep}>
+<div class="hud-frame relative flex h-full w-full flex-col p-4">
   <span class="hud-corner tl" style="border-color: var(--c-{accent})"></span>
   <span class="hud-corner tr" style="border-color: var(--c-{accent})"></span>
   <span class="hud-corner bl" style="border-color: var(--c-{accent})"></span>

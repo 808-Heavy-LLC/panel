@@ -1,11 +1,10 @@
-export const THEMES = ['hud', 'cyberpunk', 'mission-control', 'matrix'] as const;
+export const THEMES = ['hud', 'cyberpunk', 'mission-control'] as const;
 export type ThemeName = (typeof THEMES)[number];
 
 export const THEME_LABELS: Record<ThemeName, string> = {
   hud: 'HUD',
   cyberpunk: 'CYBERPUNK',
   'mission-control': 'MISSION CONTROL',
-  matrix: 'MATRIX',
 };
 
 const STORAGE_KEY = 'panel.theme';

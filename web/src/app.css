@@ -6,6 +6,10 @@
 @import '@fontsource/vt323/400.css';
 @import '@fontsource/share-tech-mono/400.css';
 
+/* Tuned for Raspberry Pi 4B GPU. Animations and box-shadow blurs are
+ * intentionally minimal across all themes — Pi's VideoCore can't keep
+ * up with whole-tree filter animations or large blur radii. */
+
 /* ============================================================
    Semantic design tokens. Per-theme overrides below.
    Roles:
@@ -54,7 +58,7 @@
 
   --frame-corner: 14px;
   --frame-border-blend: linear-gradient(135deg, var(--c-primary) 0%, var(--c-line-bright) 30%, var(--c-line-bright) 70%, var(--c-secondary) 100%);
-  --glow-mult: 0.7;
+  --glow-mult: 0.3;
 
   --bg-radial-1: radial-gradient(ellipse at top, color-mix(in oklab, var(--c-primary) 6%, transparent), transparent 60%);
   --bg-radial-2: radial-gradient(ellipse at bottom right, color-mix(in oklab, var(--c-secondary) 4%, transparent), transparent 60%);
@@ -97,7 +101,7 @@
 
   --frame-corner: 18px;
   --frame-border-blend: linear-gradient(135deg, var(--c-primary) 0%, var(--c-secondary) 50%, var(--c-primary) 100%);
-  --glow-mult: 1;
+  --glow-mult: 0.3;
 
   --bg-radial-1: radial-gradient(ellipse 80% 60% at 50% 100%, color-mix(in oklab, var(--c-secondary) 22%, transparent), transparent 70%);
   --bg-radial-2: radial-gradient(ellipse 100% 50% at 50% 0%, color-mix(in oklab, var(--c-primary) 10%, transparent), transparent 60%);
@@ -150,49 +154,6 @@
   --scanline-step: 3px;
 }
 
-[data-theme='matrix'] {
-  --c-bg: #000300;
-  --c-bg-panel: #001a0d;
-  --c-bg-panel-2: #00220e;
-  --c-bg-overlay: rgba(0, 3, 0, 0.7);
-
-  --c-line: #003d1f;
-  --c-line-bright: #00662e;
-
-  --c-primary: #00ff41;
-  --c-secondary: #00b32d;
-  --c-ok: #00ff41;
-  --c-warn: #d6ff00;
-  --c-err: #ff4747;
-
-  --c-text-bright: #b3ffb3;
-  --c-text: #57b357;
-  --c-text-dim: #2d6c39;
-
-  --dpi-1: #00ff41;
-  --dpi-2: #00cc34;
-  --dpi-3: #66ff85;
-  --dpi-4: #009928;
-  --dpi-5: #b3ff66;
-  --dpi-6: #d6ff00;
-  --dpi-7: #00b32d;
-  --dpi-8: #80ff80;
-
-  --font-display: 'Share Tech Mono', monospace;
-  --font-mono: 'Share Tech Mono', 'JetBrains Mono Variable', monospace;
-
-  --frame-corner: 0px;
-  --frame-border-blend: linear-gradient(180deg, var(--c-primary), var(--c-secondary));
-  --glow-mult: 0.7;
-
-  --bg-radial-1: radial-gradient(ellipse at center, color-mix(in oklab, var(--c-primary) 4%, transparent), transparent 65%);
-  --bg-radial-2: none;
-
-  --noise-opacity: 0.02;
-  --scanline-opacity: 0.025;
-  --scanline-step: 3px;
-}
-
 /* ============================================================
    Global resets + body chrome
    ============================================================ */
@@ -219,14 +180,9 @@ body {
   }
 }
 
+/* Noise overlay disabled — mix-blend-mode is too expensive on the Pi GPU. */
 .hud-noise {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: var(--noise-opacity);
-  z-index: 100;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  mix-blend-mode: overlay;
+  display: none;
 }
 
 .hud-scanlines {
@@ -336,33 +292,6 @@ body {
   background: var(--c-line-bright);
 }
 
-/* Matrix: thinner brackets, primary-only, see-through frames so rain shows */
-[data-theme='matrix'] .hud-corner {
-  width: 12px;
-  height: 12px;
-  border-width: 1px !important;
-}
-[data-theme='matrix'] .hud-frame {
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklab, var(--c-bg-panel) 65%, transparent),
-    color-mix(in oklab, var(--c-bg-panel-2) 65%, transparent)
-  );
-}
-[data-theme='matrix'] .hud-frame::before {
-  background: linear-gradient(180deg, var(--c-primary), var(--c-secondary));
-  opacity: 0.6;
-}
-
-/* Cyberpunk: more transparent frames so the perspective grid bleeds through */
-[data-theme='cyberpunk'] .hud-frame {
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklab, var(--c-bg-panel) 78%, transparent),
-    color-mix(in oklab, var(--c-bg-panel-2) 78%, transparent)
-  );
-}
-
 /* ============================================================
    Type utilities (semantic colors, glow scales w/ theme)
    ============================================================ */
@@ -446,11 +375,15 @@ body {
     transform: translateX(200%);
   }
 }
+/* Sweep effect kept available but disabled by default — too expensive on Pi.
+ * Enable per-element with class="hud-sweep hud-sweep-active". */
 .hud-sweep {
   position: relative;
+}
+.hud-sweep-active {
   overflow: hidden;
 }
-.hud-sweep::after {
+.hud-sweep-active::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -466,22 +399,11 @@ body {
 }
 
 /* ============================================================
-   Mission Control: kill animations, look like a quiet console
-   ============================================================ */
-
-[data-theme='mission-control'] .hud-sweep::after {
-  display: none;
-}
-[data-theme='mission-control'] .hud-noise {
-  display: none;
-}
-
-/* ============================================================
    Honor prefers-reduced-motion globally
    ============================================================ */
 
 @media (prefers-reduced-motion: reduce) {
-  .hud-sweep::after,
+  .hud-sweep-active::after,
   .hud-flicker,
   .hud-pulse-dot {
     animation: none !important;

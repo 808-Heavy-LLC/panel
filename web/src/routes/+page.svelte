@@ -8,8 +8,6 @@
   import ClientsPanel from '$lib/components/ClientsPanel.svelte';
   import DpiPanel from '$lib/components/DpiPanel.svelte';
   import UdmStats from '$lib/components/UdmStats.svelte';
-  import MatrixRain from '$lib/components/MatrixRain.svelte';
-  import PerspectiveGrid from '$lib/components/PerspectiveGrid.svelte';
   import ThemeIndicator from '$lib/components/ThemeIndicator.svelte';
   import '../app.css';
 
@@ -23,14 +21,11 @@
   });
 </script>
 
-<PerspectiveGrid />
-<MatrixRain />
-
 <div class="panel-root flex h-screen w-screen flex-col">
   <HudHeader />
 
   <main class="grid min-h-0 flex-1 gap-4 p-4" style="grid-template-columns: 2fr 1fr; grid-template-rows: 1.1fr 1fr;">
-    <HudFrame label="WAN THROUGHPUT" accent="primary" sweep>
+    <HudFrame label="WAN THROUGHPUT" accent="primary">
       {#snippet actions()}
         <span>WINDOW · 90s</span>
       {/snippet}
