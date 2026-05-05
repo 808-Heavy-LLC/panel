@@ -178,9 +178,7 @@
     return c;
   }
 
-  // Cap chart redraws at ~24fps. The data updates every 2s anyway, so
-  // higher framerates burn Pi GPU cycles for almost no visual benefit.
-  const TARGET_FPS = 24;
+  const TARGET_FPS = 60;
   const FRAME_MIN_MS = 1000 / TARGET_FPS;
   let lastFrameTs = 0;
 

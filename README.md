@@ -61,16 +61,16 @@ There is no test suite. Typecheck is the only check.
 
 ## Themes
 
-Three themes (`hud`, `cyberpunk`, `mission-control`) live in CSS custom properties under `[data-theme="…"]` in `web/src/app.css`. The current theme is persisted in `localStorage`.
+Seven themes live in CSS custom properties under `[data-theme="…"]` in `web/src/app.css`: `hud` (cyan/amber default), `cyberpunk` (cyan/magenta neon), `synthwave` (warm pink/teal sunset), `infrared` (thermal orange/red), `blueprint` (white-on-navy with grid), `phosphor` (amber CRT monochrome), `arctic` (ice-blue/white). The current theme is persisted in `localStorage`.
 
 Keyboard:
 
 - `t` — cycle forward
 - `Shift+t` — cycle backward
-- `1`–`3` — jump to theme
-- `?theme=cyberpunk` URL param overrides
+- `1`–`7` — jump to theme
+- `?theme=synthwave` URL param overrides
 
-To prevent kiosk LCD burn-in, `web/src/lib/burnInGuard.ts` drifts the UI by a few pixels every few minutes and rotates the active theme. New themes should match the animation cost of the others — heavy themes break the rotation.
+To prevent kiosk LCD burn-in, `web/src/lib/burnInGuard.ts` drifts the UI by a few pixels every few minutes and rotates the active theme. New themes should keep their animation cost roughly equal — heavy themes break the rotation.
 
 ## Deploying to a Pi
 

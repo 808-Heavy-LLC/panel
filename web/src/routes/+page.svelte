@@ -74,4 +74,7 @@
   </main>
 </div>
 
+<div class="hud-scanlines"></div>
+<div class="hud-noise"></div>
+
 <ThemeIndicator />

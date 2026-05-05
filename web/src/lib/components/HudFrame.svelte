@@ -16,7 +16,7 @@
   <span class="hud-corner br" style="border-color: var(--c-{accent})"></span>
 
   {#if label || actions}
-    <header class="mb-3 flex items-center justify-between gap-2">
+    <header class="hud-sweep mb-3 flex items-center justify-between gap-2">
       {#if label}
         <div class="flex items-center gap-2">
           <span class="hud-label text-[11px]" style="color: var(--c-{accent})">
