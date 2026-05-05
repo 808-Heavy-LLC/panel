@@ -38,6 +38,8 @@ fi
 
 exec "$BROWSER" \
   --kiosk \
+  --ozone-platform-hint=auto \
+  --enable-features=UseOzonePlatform \
   --noerrdialogs \
   --disable-infobars \
   --disable-translate \
