@@ -21,6 +21,7 @@ class PanelStore {
   histories = $state<Record<string, WanSample[]>>({});
   clients = $state<ClientStat[]>([]);
   dpi = $state<DpiCategory[]>([]);
+  dpiCategories = $state<DpiCategory[]>([]);
   udm = $state<UdmInfo | null>(null);
   features = $state({ dpiAvailable: false, perClientRates: false, snmpAvailable: false });
   lastTickAt = $state(0);
@@ -34,6 +35,7 @@ class PanelStore {
     this.histories = trimmed;
     this.clients = s.clients;
     this.dpi = s.dpi;
+    this.dpiCategories = s.dpiCategories;
     this.udm = s.udm;
     this.features = s.features;
     this.lastTickAt = s.ts;
@@ -43,6 +45,7 @@ class PanelStore {
     this.wans = t.wans;
     if (t.clients) this.clients = t.clients;
     if (t.dpi) this.dpi = t.dpi;
+    if (t.dpiCategories) this.dpiCategories = t.dpiCategories;
     if (t.udm) this.udm = t.udm;
     const next = { ...this.histories };
     for (const s of t.samples) {

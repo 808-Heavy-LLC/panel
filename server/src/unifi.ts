@@ -120,6 +120,9 @@ export class UnifiClient {
   private base: string;
   /** Combined-id (cat<<16 | app) → human name. Loaded once at connect. */
   private appCatalog: Map<number, string> = new Map();
+  /** Category id → human name. Loaded from same UI catalog as appCatalog;
+   *  authoritative over the hardcoded fallback in DPI_CATEGORIES. */
+  private categoryCatalog: Map<number, string> = new Map();
 
   constructor(private opts: UnifiOpts) {
     this.agent = new Agent({
@@ -139,13 +142,18 @@ export class UnifiClient {
   async connect(): Promise<void> {
     if (this.mode === 'legacy') {
       await this.legacyLogin();
-      // Best-effort: load the app-name catalog so /api/snapshot can label
-      // top apps. Failure here doesn't block — apps fall back to "App N".
-      this.appCatalog = await this.fetchAppCatalog().catch((err) => {
+      // Best-effort: load the catalogs so /api/snapshot can label top apps
+      // and use authoritative category names. Failure here doesn't block.
+      try {
+        const { apps, categories } = await this.fetchDpiCatalogs();
+        this.appCatalog = apps;
+        this.categoryCatalog = categories;
+        console.log(
+          `[unifi] DPI catalog loaded: ${apps.size} apps, ${categories.size} categories`,
+        );
+      } catch (err) {
         console.error('[unifi] DPI catalog fetch failed:', err);
-        return new Map();
-      });
-      console.log(`[unifi] DPI catalog loaded: ${this.appCatalog.size} entries`);
+      }
     } else if (this.mode === 'integration') {
       // Probe sites endpoint to verify key works.
       await this.integrationGet('/proxy/network/integration/v1/sites');
@@ -156,22 +164,29 @@ export class UnifiClient {
 
   /** Fetch the UniFi UI's `dynamic.dpi.js` and parse its
    *  `<id>:{name:"..."}` entries. The asset path includes a hash that
-   *  changes per firmware build, so we discover it from the main HTML. */
-  private async fetchAppCatalog(): Promise<Map<number, string>> {
+   *  changes per firmware build, so we discover it from the main HTML.
+   *  The file contains both category entries (small ids) and combined
+   *  app entries (cat<<16 | app); we extract both. The within-category
+   *  app sub-blocks reuse small ids, but those re-appear after the
+   *  category block so first-occurrence-wins on small ids gives us the
+   *  category names. */
+  private async fetchDpiCatalogs(): Promise<{
+    apps: Map<number, string>;
+    categories: Map<number, string>;
+  }> {
     const html = await this.legacyGetText('/manage/');
     const m = html.match(/angular\/([a-zA-Z0-9_-]+)\/js\/index\.js/);
     if (!m) throw new Error('could not find angular asset hash in /manage/');
     const js = await this.legacyGetText(`/manage/angular/${m[1]}/js/dynamic.dpi.js`);
-    const map = new Map<number, string>();
+    const apps = new Map<number, string>();
+    const categories = new Map<number, string>();
     for (const entry of js.matchAll(/(\d+):\{name:"([^"]+)"/g)) {
       const id = Number(entry[1]);
       const name = entry[2]!;
-      // IDs < 65536 are categories; we only care about apps for top-app
-      // labeling. Categories overlap numerically with app sub-ids and would
-      // shadow real apps if added to the same map.
-      if (id >= 65536) map.set(id, name);
+      if (id >= 65536) apps.set(id, name);
+      else if (id <= 255 && !categories.has(id)) categories.set(id, name);
     }
-    return map;
+    return { apps, categories };
   }
 
   private async legacyGetText(path: string): Promise<string> {
@@ -290,8 +305,8 @@ export class UnifiClient {
     return [];
   }
 
-  async getDpi(): Promise<DpiCategory[]> {
-    if (this.mode !== 'legacy') return [];
+  async getTraffic(): Promise<{ apps: DpiCategory[]; categories: DpiCategory[] }> {
+    if (this.mode !== 'legacy') return { apps: [], categories: [] };
     // UniFi Network 9.x retired /stat/dpi (still 200s but always empty).
     // The dashboard now reads from /v2/.../traffic, which expects ms-precision
     // timestamps and an explicit window. 24h matches what the UI's "1D" shows.
@@ -300,29 +315,42 @@ export class UnifiClient {
     const r = await this.legacyGet<RawTrafficResponse>(
       `/v2/api/site/${this.opts.site}/traffic?start=${start}&end=${end}&includeUnidentified=true`,
     );
-    const apps = r.total_usage_by_app ?? [];
-    // Name lookup uses the combined id (cat<<16 | app) as the UI does.
-    const total = apps.reduce(
-      (acc, a) => acc + (a.total_bytes ?? (a.bytes_received ?? 0) + (a.bytes_transmitted ?? 0)),
-      0,
-    );
-    return apps
+    const rawApps = r.total_usage_by_app ?? [];
+    const bytesOf = (a: RawTrafficApp) =>
+      a.total_bytes ?? (a.bytes_received ?? 0) + (a.bytes_transmitted ?? 0);
+    const total = rawApps.reduce((acc, a) => acc + bytesOf(a), 0);
+
+    const catName = (cat: number): string =>
+      this.categoryCatalog.get(cat) ?? dpiCatName(cat);
+
+    const apps = rawApps
       .map((a) => {
         const cat = a.category ?? 255;
         const app = a.application ?? 0;
         const combined = (cat << 16) | app;
-        const bytes = a.total_bytes ?? (a.bytes_received ?? 0) + (a.bytes_transmitted ?? 0);
+        const bytes = bytesOf(a);
         const name =
           this.appCatalog.get(combined) ??
-          (cat === 255 ? 'Unidentified' : `${dpiCatName(cat)} · ${app}`);
-        return {
-          id: String(combined),
-          name,
-          bytes,
-          pct: total > 0 ? bytes / total : 0,
-        };
+          (cat === 255 ? 'Unidentified' : `${catName(cat)} · ${app}`);
+        return { id: String(combined), name, bytes, pct: total > 0 ? bytes / total : 0 };
       })
       .sort((a, b) => b.bytes - a.bytes);
+
+    const byCat = new Map<number, number>();
+    for (const a of rawApps) {
+      const cat = a.category ?? 255;
+      byCat.set(cat, (byCat.get(cat) ?? 0) + bytesOf(a));
+    }
+    const categories = [...byCat.entries()]
+      .map(([cat, bytes]) => ({
+        id: String(cat),
+        name: catName(cat),
+        bytes,
+        pct: total > 0 ? bytes / total : 0,
+      }))
+      .sort((a, b) => b.bytes - a.bytes);
+
+    return { apps, categories };
   }
 
   async getUdmInfo(): Promise<UdmInfo | null> {

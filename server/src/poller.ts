@@ -27,6 +27,7 @@ export async function startPoller(): Promise<void> {
     store.setFeatures({ dpiAvailable: true, perClientRates: true, snmpAvailable: true });
     let lastClients: ClientStat[] = [];
     let lastDpi: DpiCategory[] = [];
+    let lastDpiCategories: DpiCategory[] = [];
     let lastUdm: UdmInfo | null = null;
     let clientsAt = 0;
     let dpiAt = 0;
@@ -40,7 +41,9 @@ export async function startPoller(): Promise<void> {
       }
       if (now - dpiAt >= config.poll.dpiMs) {
         dpiAt = now;
-        lastDpi = mockDpi();
+        const { apps, categories } = mockDpi();
+        lastDpi = apps;
+        lastDpiCategories = categories;
       }
       if (now - udmAt >= config.poll.udmInfoMs) {
         udmAt = now;
@@ -50,6 +53,7 @@ export async function startPoller(): Promise<void> {
         wans,
         clients: lastClients.length ? lastClients : undefined,
         dpi: lastDpi.length ? lastDpi : undefined,
+        dpiCategories: lastDpiCategories.length ? lastDpiCategories : undefined,
         udm: lastUdm ?? undefined,
       });
     };
@@ -171,6 +175,7 @@ export async function startPoller(): Promise<void> {
 
   let lastClients: ClientStat[] = [];
   let lastDpi: DpiCategory[] = [];
+  let lastDpiCategories: DpiCategory[] = [];
   let lastUdm: UdmInfo | null = null;
   let clientsAt = 0;
   let dpiAt = 0;
@@ -224,9 +229,10 @@ export async function startPoller(): Promise<void> {
       dpiAt = now;
       tasks.push(
         unifi
-          .getDpi()
-          .then((d) => {
-            lastDpi = d;
+          .getTraffic()
+          .then(({ apps, categories }) => {
+            lastDpi = apps;
+            lastDpiCategories = categories;
           })
           .catch((e) => console.error('[poller] dpi error', e)),
       );
@@ -263,6 +269,7 @@ export async function startPoller(): Promise<void> {
       wans: wanOut,
       clients: lastClients.length ? lastClients : undefined,
       dpi: lastDpi.length ? lastDpi : undefined,
+      dpiCategories: lastDpiCategories.length ? lastDpiCategories : undefined,
       udm: lastUdm ?? undefined,
     });
   };

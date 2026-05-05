@@ -20,7 +20,7 @@ const CLIENT_FIXTURES = [
   { name: 'pihole-pi', isWired: true, baseDown: 100_000, baseUp: 50_000 },
 ];
 
-const DPI_FIXTURES = [
+const DPI_CATEGORY_FIXTURES = [
   { name: 'Streaming', weight: 62 },
   { name: 'Web', weight: 14 },
   { name: 'Games', weight: 9 },
@@ -28,6 +28,17 @@ const DPI_FIXTURES = [
   { name: 'Cloud', weight: 4 },
   { name: 'Conferencing', weight: 3 },
   { name: 'Update Tools', weight: 2 },
+];
+
+const DPI_APP_FIXTURES = [
+  { name: 'YouTube', weight: 28 },
+  { name: 'Netflix', weight: 22 },
+  { name: 'iCloud', weight: 12 },
+  { name: 'SSL/TLS', weight: 10 },
+  { name: 'Zoom', weight: 7 },
+  { name: 'Discord', weight: 5 },
+  { name: 'Steam', weight: 4 },
+  { name: 'GitHub', weight: 3 },
 ];
 
 type WanState = { rxTotal: number; txTotal: number; phaseOffset: number; baseRx: number; baseTx: number; ifName: string; ip: string };
@@ -94,14 +105,20 @@ export function mockClients(): ClientStat[] {
   });
 }
 
-export function mockDpi(): DpiCategory[] {
-  const totalWeight = DPI_FIXTURES.reduce((a, b) => a + b.weight, 0);
-  return DPI_FIXTURES.map((d, i) => ({
-    id: `mock-${i}`,
-    name: d.name,
-    bytes: d.weight * 100_000_000_000,
-    pct: d.weight / totalWeight,
-  }));
+export function mockDpi(): { apps: DpiCategory[]; categories: DpiCategory[] } {
+  const build = (fixtures: { name: string; weight: number }[], prefix: string) => {
+    const totalWeight = fixtures.reduce((a, b) => a + b.weight, 0);
+    return fixtures.map((d, i) => ({
+      id: `${prefix}-${i}`,
+      name: d.name,
+      bytes: d.weight * 100_000_000_000,
+      pct: d.weight / totalWeight,
+    }));
+  };
+  return {
+    apps: build(DPI_APP_FIXTURES, 'mock-app'),
+    categories: build(DPI_CATEGORY_FIXTURES, 'mock-cat'),
+  };
 }
 
 export function mockUdm(): UdmInfo {

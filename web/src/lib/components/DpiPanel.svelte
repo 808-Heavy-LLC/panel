@@ -3,6 +3,9 @@
   import { theme } from '$lib/theme.svelte';
   import { formatBytes } from '$lib/format';
 
+  type Props = { source?: 'apps' | 'categories' };
+  let { source = 'apps' }: Props = $props();
+
   // Read theme palette from CSS vars; re-evaluates whenever theme changes.
   const palette = $derived.by(() => {
     void theme.current;
@@ -11,7 +14,7 @@
     return Array.from({ length: 8 }, (_, i) => root.getPropertyValue(`--dpi-${i + 1}`).trim() || '#00d9ff');
   });
 
-  const top = $derived(panel.dpi.slice(0, 8));
+  const top = $derived((source === 'categories' ? panel.dpiCategories : panel.dpi).slice(0, 8));
   const totalBytes = $derived(top.reduce((a, b) => a + b.bytes, 0));
 
   const RADIUS = 60;

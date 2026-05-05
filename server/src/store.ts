@@ -11,6 +11,7 @@ const state = {
   histories: {} as Record<string, WanSample[]>,
   clients: [] as ClientStat[],
   dpi: [] as DpiCategory[],
+  dpiCategories: [] as DpiCategory[],
   udm: null as UdmInfo | null,
   features: { dpiAvailable: false, perClientRates: false, snmpAvailable: false },
 };
@@ -30,12 +31,14 @@ export const store = {
     wans: Wan[];
     clients?: ClientStat[];
     dpi?: DpiCategory[];
+    dpiCategories?: DpiCategory[];
     udm?: UdmInfo;
   }): void {
     const ts = Date.now();
     state.wans = input.wans;
     if (input.clients) state.clients = input.clients;
     if (input.dpi) state.dpi = input.dpi;
+    if (input.dpiCategories) state.dpiCategories = input.dpiCategories;
     if (input.udm) state.udm = input.udm;
 
     const samples: Tick['samples'] = [];
@@ -56,6 +59,7 @@ export const store = {
       samples,
       ...(input.clients ? { clients: input.clients } : {}),
       ...(input.dpi ? { dpi: input.dpi } : {}),
+      ...(input.dpiCategories ? { dpiCategories: input.dpiCategories } : {}),
       ...(input.udm ? { udm: input.udm } : {}),
     };
 
@@ -77,6 +81,7 @@ export const store = {
       histories: Object.fromEntries(Object.entries(state.histories).map(([k, v]) => [k, v.slice()])),
       clients: state.clients,
       dpi: state.dpi,
+      dpiCategories: state.dpiCategories,
       udm: state.udm,
       features: { ...state.features },
     };

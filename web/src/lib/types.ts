@@ -60,6 +60,7 @@ export type Snapshot = {
   histories: Record<string, WanSample[]>;
   clients: ClientStat[];
   dpi: DpiCategory[];
+  dpiCategories: DpiCategory[];
   udm: UdmInfo | null;
   features: { dpiAvailable: boolean; perClientRates: boolean; snmpAvailable: boolean };
 };
@@ -70,6 +71,7 @@ export type Tick = {
   samples: Array<{ id: string; rxBps: number; txBps: number }>;
   clients?: ClientStat[];
   dpi?: DpiCategory[];
+  dpiCategories?: DpiCategory[];
   udm?: UdmInfo;
 };
 
