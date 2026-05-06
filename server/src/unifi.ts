@@ -94,6 +94,8 @@ type RawV2Device = RawDevice & {
     enable?: boolean;
     poe_enable?: boolean;
     port_poe?: boolean;
+    rx_bytes?: number;
+    tx_bytes?: number;
     'rx_bytes-r'?: number;
     'tx_bytes-r'?: number;
     poe_power?: string;
@@ -549,6 +551,18 @@ function toDevice(d: RawV2Device): NetworkDevice {
   const type = (['uap', 'usw', 'udm', 'uci'] as const).includes(d.type as never)
     ? (d.type as NetworkDevice['type'])
     : 'other';
+  const ports = (d.port_table ?? []).map(toPort);
+  // Switches report bytes-r=0 and rx/tx_bytes=0 at the device level; the
+  // real numbers live on each port. Sum across ports when the device
+  // total is empty. (Sum double-counts each frame — counted on both the
+  // ingress and egress port — which matches how switch fabric throughput
+  // is conventionally reported.)
+  const portsBytesRate = ports.reduce((s, p) => s + p.rxBps + p.txBps, 0);
+  const bytesRate = d['bytes-r'] || portsBytesRate;
+  const portsRxBytes = (d.port_table ?? []).reduce((s, p) => s + (p.rx_bytes ?? 0), 0);
+  const portsTxBytes = (d.port_table ?? []).reduce((s, p) => s + (p.tx_bytes ?? 0), 0);
+  const rxBytes = d.rx_bytes || portsRxBytes;
+  const txBytes = d.tx_bytes || portsTxBytes;
   return {
     id: d._id ?? d.mac ?? '',
     type,
@@ -559,14 +573,14 @@ function toDevice(d: RawV2Device): NetworkDevice {
     state: d.state ?? 0,
     uptimeSec: d.uptime ?? 0,
     numClients: d.num_sta ?? 0,
-    bytesRate: d['bytes-r'] ?? 0,
-    rxBytes: d.rx_bytes ?? 0,
-    txBytes: d.tx_bytes ?? 0,
+    bytesRate,
+    rxBytes,
+    txBytes,
     satisfaction: d.satisfaction ?? 0,
     cpuPct: stats?.cpu ? parsePct(stats.cpu) : null,
     memPct: stats?.mem ? parsePct(stats.mem) : null,
     tempC: d.general_temperature ?? null,
-    ports: (d.port_table ?? []).map(toPort),
+    ports,
     radios: (d.radio_table_stats ?? []).map(toRadio),
   };
 }
