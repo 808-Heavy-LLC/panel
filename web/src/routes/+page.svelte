@@ -16,7 +16,7 @@
   import '../app.css';
 
   const PAGE_COUNT = 2;
-  const AUTO_CYCLE_MS = 45_000;
+  const AUTO_CYCLE_MS = 30_000;
   let currentPage = $state(0);
 
   function go(delta: 1 | -1): void {
@@ -30,10 +30,10 @@
     const cycleTimer = window.setInterval(() => go(1), AUTO_CYCLE_MS);
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement | null)?.matches?.('input, textarea, [contenteditable]')) return;
-      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+      if (e.key === 'ArrowRight') {
         e.preventDefault();
         go(1);
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         go(-1);
       }
@@ -53,7 +53,7 @@
   <HudHeader />
 
   <div class="page-viewport min-h-0 flex-1 overflow-hidden">
-    <div class="page-track" style="transform: translateY(-{currentPage * 100}%);">
+    <div class="page-track" style="transform: translateX(-{currentPage * 100}%);">
       <!-- ============= PAGE 1: Internet / Traffic ============= -->
       <section class="page">
         <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 2fr 1fr 1fr; grid-template-rows: 1.1fr 1fr;">
@@ -164,12 +164,17 @@
     position: relative;
   }
   .page-track {
+    display: flex;
+    flex-direction: row;
     height: 100%;
+    width: 100%;
     transition: transform 700ms cubic-bezier(0.65, 0, 0.35, 1);
     will-change: transform;
   }
   .page {
+    flex: 0 0 100%;
     height: 100%;
+    min-width: 0;
   }
   .page-dots {
     display: flex;
