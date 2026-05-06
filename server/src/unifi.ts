@@ -1,5 +1,12 @@
 import { Agent, fetch as undiciFetch } from 'undici';
-import type { ClientStat, DpiCategory, UdmInfo } from './types.js';
+import type {
+  ClientStat,
+  DpiCategory,
+  NetworkDevice,
+  NetworkPort,
+  NetworkRadio,
+  UdmInfo,
+} from './types.js';
 
 type Mode = 'legacy' | 'integration' | 'none';
 
@@ -66,6 +73,43 @@ type RawDevice = {
   uptime?: number;
   'system-stats'?: { cpu?: string; mem?: string; uptime?: string };
   temperatures?: Array<{ value?: number; name?: string; type?: string }>;
+};
+
+type RawV2Device = RawDevice & {
+  ip?: string;
+  mac?: string;
+  state?: number;
+  num_sta?: number;
+  satisfaction?: number;
+  'bytes-r'?: number;
+  rx_bytes?: number;
+  tx_bytes?: number;
+  general_temperature?: number;
+  port_table?: Array<{
+    port_idx?: number;
+    name?: string;
+    up?: boolean;
+    speed?: number;
+    is_uplink?: boolean;
+    enable?: boolean;
+    poe_enable?: boolean;
+    port_poe?: boolean;
+    'rx_bytes-r'?: number;
+    'tx_bytes-r'?: number;
+    poe_power?: string;
+  }>;
+  radio_table_stats?: Array<{
+    name?: string;
+    radio?: string;
+    channel?: number;
+    bw?: number;
+    'num_sta'?: number;
+    'user-num_sta'?: number;
+    cu_total?: number;
+    satisfaction?: number;
+    tx_retries?: number;
+    tx_packets?: number;
+  }>;
 };
 
 const MODEL_NAMES: Record<string, string> = {
@@ -416,6 +460,14 @@ export class UnifiClient {
     return { apps, categories };
   }
 
+  async getDevices(): Promise<NetworkDevice[]> {
+    if (this.mode !== 'legacy') return [];
+    const r = await this.legacyGet<{ network_devices?: RawV2Device[] }>(
+      `/v2/api/site/${this.opts.site}/device?separateUnmanaged=true&includeTrafficUsage=true`,
+    );
+    return (r.network_devices ?? []).map(toDevice);
+  }
+
   async getUdmInfo(): Promise<UdmInfo | null> {
     if (this.mode !== 'legacy') return null;
     // Hardware stats (cpu/mem/temp) live on the gateway *device* entry,
@@ -451,5 +503,71 @@ function parsePct(v: string | undefined): number {
   if (!v) return 0;
   const n = Number.parseFloat(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+function bandFromRadio(name: string | undefined, channel: number): '2g' | '5g' | '6g' {
+  // UniFi tags radios as 'ng' (2.4G), 'na' (5G), '6e' (6G). Fall back to
+  // channel-number heuristic when name is missing.
+  if (name === '6e' || name?.startsWith('6')) return '6g';
+  if (name === 'ng' || name === 'n') return '2g';
+  if (name === 'na' || name === 'ac' || name === 'ax') return '5g';
+  if (channel >= 1 && channel <= 14) return '2g';
+  if (channel >= 32 && channel <= 177) return '5g';
+  return '6g';
+}
+
+function toPort(p: NonNullable<RawV2Device['port_table']>[number]): NetworkPort {
+  const poeWatts = p.poe_enable && p.poe_power ? Number.parseFloat(p.poe_power) : 0;
+  return {
+    idx: p.port_idx ?? 0,
+    name: p.name ?? `Port ${p.port_idx ?? 0}`,
+    up: p.up === true,
+    speedMbps: p.speed ?? 0,
+    isUplink: p.is_uplink === true,
+    poeWatts: Number.isFinite(poeWatts) ? poeWatts : 0,
+    rxBps: p['rx_bytes-r'] ?? 0,
+    txBps: p['tx_bytes-r'] ?? 0,
+  };
+}
+
+function toRadio(r: NonNullable<RawV2Device['radio_table_stats']>[number]): NetworkRadio {
+  return {
+    name: r.name ?? r.radio ?? '',
+    band: bandFromRadio(r.radio, r.channel ?? 0),
+    channel: r.channel ?? 0,
+    bwMhz: r.bw ?? 0,
+    numClients: r['user-num_sta'] ?? r.num_sta ?? 0,
+    utilizationPct: r.cu_total ?? 0,
+    satisfaction: r.satisfaction ?? 0,
+    txRetries: r.tx_retries ?? 0,
+    txPackets: r.tx_packets ?? 0,
+  };
+}
+
+function toDevice(d: RawV2Device): NetworkDevice {
+  const stats = d['system-stats'];
+  const type = (['uap', 'usw', 'udm', 'uci'] as const).includes(d.type as never)
+    ? (d.type as NetworkDevice['type'])
+    : 'other';
+  return {
+    id: d._id ?? d.mac ?? '',
+    type,
+    name: d.name ?? d.hostname ?? d.mac ?? '',
+    model: d.model ?? '',
+    ip: d.ip ?? null,
+    mac: d.mac ?? '',
+    state: d.state ?? 0,
+    uptimeSec: d.uptime ?? 0,
+    numClients: d.num_sta ?? 0,
+    bytesRate: d['bytes-r'] ?? 0,
+    rxBytes: d.rx_bytes ?? 0,
+    txBytes: d.tx_bytes ?? 0,
+    satisfaction: d.satisfaction ?? 0,
+    cpuPct: stats?.cpu ? parsePct(stats.cpu) : null,
+    memPct: stats?.mem ? parsePct(stats.mem) : null,
+    tempC: d.general_temperature ?? null,
+    ports: (d.port_table ?? []).map(toPort),
+    radios: (d.radio_table_stats ?? []).map(toRadio),
+  };
 }
 

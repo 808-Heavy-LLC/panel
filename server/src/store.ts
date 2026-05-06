@@ -1,5 +1,14 @@
 import { config } from './config.js';
-import type { ClientStat, DpiCategory, Snapshot, Tick, UdmInfo, Wan, WanSample } from './types.js';
+import type {
+  ClientStat,
+  DpiCategory,
+  NetworkDevice,
+  Snapshot,
+  Tick,
+  UdmInfo,
+  Wan,
+  WanSample,
+} from './types.js';
 
 type Listener = (tick: Tick) => void;
 
@@ -13,6 +22,7 @@ const state = {
   dpi: [] as DpiCategory[],
   dpiCategories: [] as DpiCategory[],
   udm: null as UdmInfo | null,
+  devices: [] as NetworkDevice[],
   features: { dpiAvailable: false, perClientRates: false, snmpAvailable: false },
 };
 
@@ -33,6 +43,7 @@ export const store = {
     dpi?: DpiCategory[];
     dpiCategories?: DpiCategory[];
     udm?: UdmInfo;
+    devices?: NetworkDevice[];
   }): void {
     const ts = Date.now();
     state.wans = input.wans;
@@ -40,6 +51,7 @@ export const store = {
     if (input.dpi) state.dpi = input.dpi;
     if (input.dpiCategories) state.dpiCategories = input.dpiCategories;
     if (input.udm) state.udm = input.udm;
+    if (input.devices) state.devices = input.devices;
 
     const samples: Tick['samples'] = [];
     for (const w of input.wans) {
@@ -61,6 +73,7 @@ export const store = {
       ...(input.dpi ? { dpi: input.dpi } : {}),
       ...(input.dpiCategories ? { dpiCategories: input.dpiCategories } : {}),
       ...(input.udm ? { udm: input.udm } : {}),
+      ...(input.devices ? { devices: input.devices } : {}),
     };
 
     for (const l of listeners) {
@@ -83,6 +96,7 @@ export const store = {
       dpi: state.dpi,
       dpiCategories: state.dpiCategories,
       udm: state.udm,
+      devices: state.devices,
       features: { ...state.features },
     };
   },

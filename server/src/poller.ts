@@ -1,8 +1,8 @@
 import { config } from './config.js';
-import { mockClients, mockDpi, mockUdm, mockWans } from './mock.js';
+import { mockClients, mockDevices, mockDpi, mockUdm, mockWans } from './mock.js';
 import { autoDetectWanInterfaces, SnmpClient, type SnmpInterface } from './snmp.js';
 import { store } from './store.js';
-import type { ClientStat, DpiCategory, UdmInfo, Wan } from './types.js';
+import type { ClientStat, DpiCategory, NetworkDevice, UdmInfo, Wan } from './types.js';
 import { UnifiClient } from './unifi.js';
 
 type WanRuntime = {
@@ -29,6 +29,7 @@ export async function startPoller(): Promise<void> {
     let lastDpi: DpiCategory[] = [];
     let lastDpiCategories: DpiCategory[] = [];
     let lastUdm: UdmInfo | null = null;
+    let lastDevices: NetworkDevice[] = [];
     let clientsAt = 0;
     let dpiAt = 0;
     let udmAt = 0;
@@ -48,6 +49,7 @@ export async function startPoller(): Promise<void> {
       if (now - udmAt >= config.poll.udmInfoMs) {
         udmAt = now;
         lastUdm = mockUdm();
+        lastDevices = mockDevices();
       }
       store.pushTick({
         wans,
@@ -55,6 +57,7 @@ export async function startPoller(): Promise<void> {
         dpi: lastDpi.length ? lastDpi : undefined,
         dpiCategories: lastDpiCategories.length ? lastDpiCategories : undefined,
         udm: lastUdm ?? undefined,
+        devices: lastDevices.length ? lastDevices : undefined,
       });
     };
     tick();
@@ -177,6 +180,7 @@ export async function startPoller(): Promise<void> {
   let lastDpi: DpiCategory[] = [];
   let lastDpiCategories: DpiCategory[] = [];
   let lastUdm: UdmInfo | null = null;
+  let lastDevices: NetworkDevice[] = [];
   let clientsAt = 0;
   let dpiAt = 0;
   let udmAt = 0;
@@ -247,6 +251,14 @@ export async function startPoller(): Promise<void> {
           })
           .catch((e) => console.error('[poller] udm info error', e)),
       );
+      tasks.push(
+        unifi
+          .getDevices()
+          .then((d) => {
+            lastDevices = d;
+          })
+          .catch((e) => console.error('[poller] devices error', e)),
+      );
     }
     await Promise.all(tasks);
 
@@ -271,6 +283,7 @@ export async function startPoller(): Promise<void> {
       dpi: lastDpi.length ? lastDpi : undefined,
       dpiCategories: lastDpiCategories.length ? lastDpiCategories : undefined,
       udm: lastUdm ?? undefined,
+      devices: lastDevices.length ? lastDevices : undefined,
     });
   };
 

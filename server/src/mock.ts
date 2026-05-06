@@ -1,4 +1,4 @@
-import type { ClientStat, DpiCategory, UdmInfo, Wan } from './types.js';
+import type { ClientStat, DpiCategory, NetworkDevice, UdmInfo, Wan } from './types.js';
 
 const CLIENT_FIXTURES = [
   { name: 'tv-livingroom', isWired: true, baseDown: 35_000_000, baseUp: 800_000 },
@@ -133,4 +133,86 @@ export function mockUdm(): UdmInfo {
     memPct: 38 + noise(4),
     tempC: 52 + env * 4 + noise(1),
   };
+}
+
+const AP_FIXTURES = [
+  { name: 'garage-ap.808.org', model: 'U7PRO', clients: 5, ch24: 6, ch5: 100, ch6: 49 },
+  { name: 'dining-ap.808.org', model: 'U7PRO', clients: 14, ch24: 1, ch5: 36, ch6: 1 },
+  { name: 'living-ap.808.org', model: 'U7PRO', clients: 11, ch24: 11, ch5: 149, ch6: 17 },
+  { name: 'mainbed-ap.808.org', model: 'U7PRO', clients: 6, ch24: 6, ch5: 44, ch6: 33 },
+  { name: 'bnlroom-ap.808.org', model: 'U7PRO', clients: 8, ch24: 1, ch5: 64, ch6: 65 },
+  { name: 'backyard-ap.808.org', model: 'UKPW', clients: 3, ch24: 6, ch5: 36, ch6: 0 },
+];
+
+const SWITCH_FIXTURES = [
+  { name: 'desksw.808.org', model: 'USPM16P', portsActive: 12, portsTotal: 18, poeWatts: 32 },
+  { name: 'rack-sw-1.808.org', model: 'USXG24', portsActive: 18, portsTotal: 24, poeWatts: 0 },
+  { name: 'rack-sw-2.808.org', model: 'USL24P', portsActive: 8, portsTotal: 24, poeWatts: 96 },
+  { name: 'garage-sw.808.org', model: 'USL16P', portsActive: 5, portsTotal: 16, poeWatts: 18 },
+  { name: 'living-sw.808.org', model: 'USL8P', portsActive: 4, portsTotal: 8, poeWatts: 14 },
+  { name: 'kitchen-sw.808.org', model: 'USL8P', portsActive: 3, portsTotal: 8, poeWatts: 0 },
+  { name: 'office-sw.808.org', model: 'USL8P', portsActive: 6, portsTotal: 8, poeWatts: 22 },
+  { name: 'bnlroom-sw.808.org', model: 'USL8P', portsActive: 2, portsTotal: 8, poeWatts: 7 },
+];
+
+export function mockDevices(): NetworkDevice[] {
+  const env = envelope(phase);
+  const aps: NetworkDevice[] = AP_FIXTURES.map((a, i) => ({
+    id: `mock-ap-${i}`,
+    type: 'uap',
+    name: a.name,
+    model: a.model,
+    ip: `192.168.1.${10 + i}`,
+    mac: `aa:bb:cc:dd:00:${i.toString(16).padStart(2, '0')}`,
+    state: 1,
+    uptimeSec: 1_000_000 + i * 100_000,
+    numClients: a.clients,
+    bytesRate: a.clients * 800_000 * env + noise(50_000),
+    rxBytes: 20_000_000_000 + i * 1_000_000_000,
+    txBytes: 4_000_000_000 + i * 200_000_000,
+    satisfaction: 90 + Math.floor(noise(8)),
+    cpuPct: 8 + env * 12 + noise(3),
+    memPct: 25 + noise(5),
+    tempC: null,
+    ports: [],
+    radios: [
+      { name: 'ng', band: '2g', channel: a.ch24, bwMhz: 20, numClients: Math.floor(a.clients * 0.2), utilizationPct: 18 + noise(8), satisfaction: 95, txRetries: 1000 + Math.floor(noise(500)), txPackets: 100_000 },
+      { name: 'na', band: '5g', channel: a.ch5, bwMhz: 80, numClients: Math.floor(a.clients * 0.5), utilizationPct: 32 + noise(15), satisfaction: 92, txRetries: 5000 + Math.floor(noise(2000)), txPackets: 500_000 },
+      ...(a.ch6
+        ? ([
+            { name: '6e', band: '6g' as const, channel: a.ch6, bwMhz: 160, numClients: Math.floor(a.clients * 0.3), utilizationPct: 12 + noise(6), satisfaction: 98, txRetries: 200 + Math.floor(noise(100)), txPackets: 200_000 },
+          ])
+        : []),
+    ],
+  }));
+  const sws: NetworkDevice[] = SWITCH_FIXTURES.map((s, i) => ({
+    id: `mock-sw-${i}`,
+    type: 'usw',
+    name: s.name,
+    model: s.model,
+    ip: `192.168.1.${30 + i}`,
+    mac: `aa:bb:cc:ee:00:${i.toString(16).padStart(2, '0')}`,
+    state: 1,
+    uptimeSec: 2_000_000 + i * 100_000,
+    numClients: s.portsActive,
+    bytesRate: s.portsActive * 400_000 * env + noise(100_000),
+    rxBytes: 50_000_000_000 + i * 5_000_000_000,
+    txBytes: 50_000_000_000 + i * 5_000_000_000,
+    satisfaction: 95 + Math.floor(noise(5)),
+    cpuPct: 5 + env * 8 + noise(2),
+    memPct: 20 + noise(4),
+    tempC: 42 + env * 4 + noise(2),
+    ports: Array.from({ length: s.portsTotal }, (_, p) => ({
+      idx: p + 1,
+      name: `Port ${p + 1}`,
+      up: p < s.portsActive,
+      speedMbps: p < s.portsActive ? (p === 0 ? 10000 : 1000) : 0,
+      isUplink: p === 0,
+      poeWatts: p < s.portsActive && s.poeWatts > 0 ? s.poeWatts / s.portsActive : 0,
+      rxBps: p < s.portsActive ? 200_000 + noise(100_000) : 0,
+      txBps: p < s.portsActive ? 200_000 + noise(100_000) : 0,
+    })),
+    radios: [],
+  }));
+  return [...aps, ...sws];
 }

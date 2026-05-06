@@ -53,6 +53,50 @@ export type UdmInfo = {
   tempC: number | null;
 };
 
+export type NetworkPort = {
+  idx: number;
+  name: string;
+  up: boolean;
+  speedMbps: number;
+  isUplink: boolean;
+  poeWatts: number;
+  rxBps: number;
+  txBps: number;
+};
+
+export type NetworkRadio = {
+  name: string;
+  band: '2g' | '5g' | '6g';
+  channel: number;
+  bwMhz: number;
+  numClients: number;
+  utilizationPct: number;
+  satisfaction: number;
+  txRetries: number;
+  txPackets: number;
+};
+
+export type NetworkDevice = {
+  id: string;
+  type: 'uap' | 'usw' | 'udm' | 'uci' | 'other';
+  name: string;
+  model: string;
+  ip: string | null;
+  mac: string;
+  state: number;
+  uptimeSec: number;
+  numClients: number;
+  bytesRate: number;
+  rxBytes: number;
+  txBytes: number;
+  satisfaction: number;
+  cpuPct: number | null;
+  memPct: number | null;
+  tempC: number | null;
+  ports: NetworkPort[];
+  radios: NetworkRadio[];
+};
+
 export type Snapshot = {
   ts: number;
   source: 'live' | 'mock';
@@ -63,6 +107,7 @@ export type Snapshot = {
   dpi: DpiCategory[];
   dpiCategories: DpiCategory[];
   udm: UdmInfo | null;
+  devices: NetworkDevice[];
   features: { dpiAvailable: boolean; perClientRates: boolean; snmpAvailable: boolean };
 };
 
@@ -74,6 +119,7 @@ export type Tick = {
   dpi?: DpiCategory[];
   dpiCategories?: DpiCategory[];
   udm?: UdmInfo;
+  devices?: NetworkDevice[];
 };
 
 export type WsMessage =

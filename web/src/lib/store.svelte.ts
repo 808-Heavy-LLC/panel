@@ -1,6 +1,7 @@
 import type {
   ClientStat,
   DpiCategory,
+  NetworkDevice,
   Snapshot,
   Tick,
   UdmInfo,
@@ -23,6 +24,7 @@ class PanelStore {
   dpi = $state<DpiCategory[]>([]);
   dpiCategories = $state<DpiCategory[]>([]);
   udm = $state<UdmInfo | null>(null);
+  devices = $state<NetworkDevice[]>([]);
   features = $state({ dpiAvailable: false, perClientRates: false, snmpAvailable: false });
   lastTickAt = $state(0);
 
@@ -37,6 +39,7 @@ class PanelStore {
     this.dpi = s.dpi;
     this.dpiCategories = s.dpiCategories;
     this.udm = s.udm;
+    this.devices = s.devices;
     this.features = s.features;
     this.lastTickAt = s.ts;
   }
@@ -47,6 +50,7 @@ class PanelStore {
     if (t.dpi) this.dpi = t.dpi;
     if (t.dpiCategories) this.dpiCategories = t.dpiCategories;
     if (t.udm) this.udm = t.udm;
+    if (t.devices) this.devices = t.devices;
     const next = { ...this.histories };
     for (const s of t.samples) {
       const cur = next[s.id] ?? [];
