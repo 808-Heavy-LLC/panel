@@ -1,8 +1,8 @@
 import { config } from './config.js';
-import { mockClients, mockDevices, mockDpi, mockUdm, mockWans } from './mock.js';
+import { mockClients, mockDevices, mockDpi, mockHealth, mockUdm, mockWans } from './mock.js';
 import { autoDetectWanInterfaces, SnmpClient, type SnmpInterface } from './snmp.js';
 import { store } from './store.js';
-import type { ClientStat, DpiCategory, NetworkDevice, UdmInfo, Wan } from './types.js';
+import type { ClientStat, DpiCategory, HealthSubsystem, NetworkDevice, UdmInfo, Wan } from './types.js';
 import { UnifiClient } from './unifi.js';
 
 type WanRuntime = {
@@ -30,6 +30,7 @@ export async function startPoller(): Promise<void> {
     let lastDpiCategories: DpiCategory[] = [];
     let lastUdm: UdmInfo | null = null;
     let lastDevices: NetworkDevice[] = [];
+    let lastHealth: HealthSubsystem[] = [];
     let clientsAt = 0;
     let dpiAt = 0;
     let udmAt = 0;
@@ -50,6 +51,7 @@ export async function startPoller(): Promise<void> {
         udmAt = now;
         lastUdm = mockUdm();
         lastDevices = mockDevices();
+        lastHealth = mockHealth(wans);
       }
       store.pushTick({
         wans,
@@ -58,6 +60,7 @@ export async function startPoller(): Promise<void> {
         dpiCategories: lastDpiCategories.length ? lastDpiCategories : undefined,
         udm: lastUdm ?? undefined,
         devices: lastDevices.length ? lastDevices : undefined,
+        health: lastHealth.length ? lastHealth : undefined,
       });
     };
     tick();
@@ -194,6 +197,7 @@ export async function startPoller(): Promise<void> {
   let lastDpiCategories: DpiCategory[] = [];
   let lastUdm: UdmInfo | null = null;
   let lastDevices: NetworkDevice[] = [];
+  let lastHealth: HealthSubsystem[] = [];
   let clientsAt = 0;
   let dpiAt = 0;
   let udmAt = 0;
@@ -272,23 +276,47 @@ export async function startPoller(): Promise<void> {
           })
           .catch((e) => console.error('[poller] devices error', e)),
       );
+      tasks.push(
+        unifi
+          .getHealth()
+          .then((h) => {
+            lastHealth = h;
+          })
+          .catch((e) => console.error('[poller] health error', e)),
+      );
     }
     await Promise.all(tasks);
 
-    const wanOut: Wan[] = wans.map((w) => ({
-      id: w.id,
-      ifIndex: w.ifIndex,
-      ifName: w.ifName,
-      label: w.label,
-      speedBitsPerSec: w.speedBitsPerSec,
-      rxBps: w.rxBps,
-      txBps: w.txBps,
-      rxTotal: w.rxTotal,
-      txTotal: w.txTotal,
-      wanIp: wanIpsByIfName[w.ifName] ?? null,
-      status: 'ok',
-      latencyMs: null,
-    }));
+    // The legacy /stat/health endpoint exposes one wan entry per WAN
+    // with `latency` and `wan_ip`. Map those onto our WANs by ifName
+    // when possible (UniFi keys these as `wan` and `wan2`, and the
+    // `wan_ip` matches the public IP each one is using).
+    const wanHealthByIp = new Map<string, HealthSubsystem>();
+    for (const h of lastHealth) {
+      if (h.wanIp) wanHealthByIp.set(h.wanIp, h);
+    }
+    const wanOut: Wan[] = wans.map((w, i) => {
+      const ip = wanIpsByIfName[w.ifName] ?? null;
+      // Best-effort match: prefer ip-keyed lookup, fall back to the
+      // i-th wan-named subsystem in the order UniFi reported them.
+      const hByIp = ip ? wanHealthByIp.get(ip) : undefined;
+      const hByOrder = lastHealth.filter((h) => h.name.startsWith('wan'))[i];
+      const h = hByIp ?? hByOrder ?? null;
+      return {
+        id: w.id,
+        ifIndex: w.ifIndex,
+        ifName: w.ifName,
+        label: w.label,
+        speedBitsPerSec: w.speedBitsPerSec,
+        rxBps: w.rxBps,
+        txBps: w.txBps,
+        rxTotal: w.rxTotal,
+        txTotal: w.txTotal,
+        wanIp: ip ?? h?.wanIp ?? null,
+        status: h?.status === 'ok' ? 'ok' : h ? 'down' : 'unknown',
+        latencyMs: h?.latencyMs ?? null,
+      };
+    });
 
     store.pushTick({
       wans: wanOut,
@@ -297,6 +325,7 @@ export async function startPoller(): Promise<void> {
       dpiCategories: lastDpiCategories.length ? lastDpiCategories : undefined,
       udm: lastUdm ?? undefined,
       devices: lastDevices.length ? lastDevices : undefined,
+      health: lastHealth.length ? lastHealth : undefined,
     });
   };
 

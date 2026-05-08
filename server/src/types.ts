@@ -17,6 +17,36 @@ export type WanSample = {
   ts: number;
   rxBps: number;
   txBps: number;
+  /** Best-effort upstream latency at the time of the sample. Null when
+   *  no latency reading was available for this WAN at this tick. */
+  latencyMs: number | null;
+};
+
+/** A subsystem report from UniFi's `/stat/health` endpoint, normalized.
+ *  UniFi keys subsystems by name: `wan`, `wan2`, `www`, `lan`, `wlan`,
+ *  `vpn`. Different subsystems carry different fields, so most numeric
+ *  fields are nullable. */
+export type HealthSubsystem = {
+  name: string;
+  status: 'ok' | 'warning' | 'unknown';
+  /** Latency in ms (wan/www only). */
+  latencyMs: number | null;
+  /** Drops/errors over the controller's reporting window (wan/www). */
+  drops: number | null;
+  /** Subsystem uptime in seconds, when reported. */
+  uptimeSec: number | null;
+  /** Last speedtest down/up throughput, in Mbps (www only). */
+  xputDownMbps: number | null;
+  xputUpMbps: number | null;
+  /** Unix seconds for the last speedtest run, if any (www only). */
+  speedtestLastRunTs: number | null;
+  /** Speedtest controller status string (`Idle`, `Running`, …). */
+  speedtestStatus: string | null;
+  /** Connected user/guest counts (lan/wlan). */
+  numUser: number | null;
+  numGuest: number | null;
+  /** Public IP for this WAN (wan only). */
+  wanIp: string | null;
 };
 
 export type ClientStat = {
@@ -123,6 +153,7 @@ export type Snapshot = {
   dpiCategories: DpiCategory[];
   udm: UdmInfo | null;
   devices: NetworkDevice[];
+  health: HealthSubsystem[];
   features: {
     dpiAvailable: boolean;
     perClientRates: boolean;
@@ -133,12 +164,13 @@ export type Snapshot = {
 export type Tick = {
   ts: number;
   wans: Wan[];
-  samples: Array<{ id: string; rxBps: number; txBps: number }>;
+  samples: Array<{ id: string; rxBps: number; txBps: number; latencyMs: number | null }>;
   clients?: ClientStat[];
   dpi?: DpiCategory[];
   dpiCategories?: DpiCategory[];
   udm?: UdmInfo;
   devices?: NetworkDevice[];
+  health?: HealthSubsystem[];
 };
 
 export type WsMessage =

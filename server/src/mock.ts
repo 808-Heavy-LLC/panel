@@ -1,4 +1,11 @@
-import type { ClientStat, DpiCategory, NetworkDevice, UdmInfo, Wan } from './types.js';
+import type {
+  ClientStat,
+  DpiCategory,
+  HealthSubsystem,
+  NetworkDevice,
+  UdmInfo,
+  Wan,
+} from './types.js';
 
 const CLIENT_FIXTURES = [
   { name: 'tv-livingroom', isWired: true, baseDown: 35_000_000, baseUp: 800_000 },
@@ -68,8 +75,8 @@ export function mockWans(intervalMs = 2000): Wan[] {
       id: `wan${i + 1}`,
       ifIndex: i + 3,
       ifName: w.ifName,
-      label: `WAN ${i + 1}`,
-      speedBitsPerSec: 10_000_000_000,
+      label: i === 0 ? 'ATT Fiber' : 'Xfinity',
+      speedBitsPerSec: i === 0 ? 10_000_000_000 : 2_500_000_000,
       rxBps: rx,
       txBps: tx,
       rxTotal: w.rxTotal,
@@ -79,6 +86,84 @@ export function mockWans(intervalMs = 2000): Wan[] {
       latencyMs: 6 + Math.random() * 6 + i * 4,
     };
   });
+}
+
+export function mockHealth(wans: Wan[]): HealthSubsystem[] {
+  const out: HealthSubsystem[] = [];
+  for (let i = 0; i < wans.length; i++) {
+    const w = wans[i]!;
+    out.push({
+      name: i === 0 ? 'wan' : `wan${i + 1}`,
+      status: 'ok',
+      latencyMs: w.latencyMs ?? 8,
+      drops: Math.floor(Math.abs(noise(20))),
+      uptimeSec: 1_500_000 + i * 100_000,
+      xputDownMbps: null,
+      xputUpMbps: null,
+      speedtestLastRunTs: null,
+      speedtestStatus: null,
+      numUser: null,
+      numGuest: null,
+      wanIp: w.wanIp,
+    });
+  }
+  out.push({
+    name: 'www',
+    status: 'ok',
+    latencyMs: 8 + noise(2),
+    drops: 0,
+    uptimeSec: 1_500_000,
+    xputDownMbps: 940 + noise(20),
+    xputUpMbps: 880 + noise(20),
+    speedtestLastRunTs: Math.floor(Date.now() / 1000) - 6 * 3600,
+    speedtestStatus: 'Idle',
+    numUser: null,
+    numGuest: null,
+    wanIp: null,
+  });
+  out.push({
+    name: 'lan',
+    status: 'ok',
+    latencyMs: null,
+    drops: null,
+    uptimeSec: null,
+    xputDownMbps: null,
+    xputUpMbps: null,
+    speedtestLastRunTs: null,
+    speedtestStatus: null,
+    numUser: 32,
+    numGuest: 0,
+    wanIp: null,
+  });
+  out.push({
+    name: 'wlan',
+    status: 'ok',
+    latencyMs: null,
+    drops: null,
+    uptimeSec: null,
+    xputDownMbps: null,
+    xputUpMbps: null,
+    speedtestLastRunTs: null,
+    speedtestStatus: null,
+    numUser: 47,
+    numGuest: 3,
+    wanIp: null,
+  });
+  out.push({
+    name: 'vpn',
+    status: 'ok',
+    latencyMs: null,
+    drops: null,
+    uptimeSec: null,
+    xputDownMbps: null,
+    xputUpMbps: null,
+    speedtestLastRunTs: null,
+    speedtestStatus: null,
+    numUser: 1,
+    numGuest: null,
+    wanIp: null,
+  });
+  return out;
 }
 
 export function mockClients(): ClientStat[] {

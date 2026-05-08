@@ -1,6 +1,7 @@
 import type {
   ClientStat,
   DpiCategory,
+  HealthSubsystem,
   NetworkDevice,
   Snapshot,
   Tick,
@@ -25,6 +26,7 @@ class PanelStore {
   dpiCategories = $state<DpiCategory[]>([]);
   udm = $state<UdmInfo | null>(null);
   devices = $state<NetworkDevice[]>([]);
+  health = $state<HealthSubsystem[]>([]);
   features = $state({ dpiAvailable: false, perClientRates: false, snmpAvailable: false });
   lastTickAt = $state(0);
 
@@ -40,6 +42,7 @@ class PanelStore {
     this.dpiCategories = s.dpiCategories;
     this.udm = s.udm;
     this.devices = s.devices;
+    this.health = s.health;
     this.features = s.features;
     this.lastTickAt = s.ts;
   }
@@ -51,10 +54,11 @@ class PanelStore {
     if (t.dpiCategories) this.dpiCategories = t.dpiCategories;
     if (t.udm) this.udm = t.udm;
     if (t.devices) this.devices = t.devices;
+    if (t.health) this.health = t.health;
     const next = { ...this.histories };
     for (const s of t.samples) {
       const cur = next[s.id] ?? [];
-      const updated = [...cur, { ts: t.ts, rxBps: s.rxBps, txBps: s.txBps }];
+      const updated = [...cur, { ts: t.ts, rxBps: s.rxBps, txBps: s.txBps, latencyMs: s.latencyMs }];
       next[s.id] = updated.length > MAX_HISTORY ? updated.slice(-MAX_HISTORY) : updated;
     }
     this.histories = next;

@@ -17,6 +17,22 @@ export type WanSample = {
   ts: number;
   rxBps: number;
   txBps: number;
+  latencyMs: number | null;
+};
+
+export type HealthSubsystem = {
+  name: string;
+  status: 'ok' | 'warning' | 'unknown';
+  latencyMs: number | null;
+  drops: number | null;
+  uptimeSec: number | null;
+  xputDownMbps: number | null;
+  xputUpMbps: number | null;
+  speedtestLastRunTs: number | null;
+  speedtestStatus: string | null;
+  numUser: number | null;
+  numGuest: number | null;
+  wanIp: string | null;
 };
 
 export type ClientStat = {
@@ -116,18 +132,20 @@ export type Snapshot = {
   dpiCategories: DpiCategory[];
   udm: UdmInfo | null;
   devices: NetworkDevice[];
+  health: HealthSubsystem[];
   features: { dpiAvailable: boolean; perClientRates: boolean; snmpAvailable: boolean };
 };
 
 export type Tick = {
   ts: number;
   wans: Wan[];
-  samples: Array<{ id: string; rxBps: number; txBps: number }>;
+  samples: Array<{ id: string; rxBps: number; txBps: number; latencyMs: number | null }>;
   clients?: ClientStat[];
   dpi?: DpiCategory[];
   dpiCategories?: DpiCategory[];
   udm?: UdmInfo;
   devices?: NetworkDevice[];
+  health?: HealthSubsystem[];
 };
 
 export type WsMessage =

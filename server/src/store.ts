@@ -2,6 +2,7 @@ import { config } from './config.js';
 import type {
   ClientStat,
   DpiCategory,
+  HealthSubsystem,
   NetworkDevice,
   Snapshot,
   Tick,
@@ -23,6 +24,7 @@ const state = {
   dpiCategories: [] as DpiCategory[],
   udm: null as UdmInfo | null,
   devices: [] as NetworkDevice[],
+  health: [] as HealthSubsystem[],
   features: { dpiAvailable: false, perClientRates: false, snmpAvailable: false },
 };
 
@@ -44,6 +46,7 @@ export const store = {
     dpiCategories?: DpiCategory[];
     udm?: UdmInfo;
     devices?: NetworkDevice[];
+    health?: HealthSubsystem[];
   }): void {
     const ts = Date.now();
     state.wans = input.wans;
@@ -52,17 +55,18 @@ export const store = {
     if (input.dpiCategories) state.dpiCategories = input.dpiCategories;
     if (input.udm) state.udm = input.udm;
     if (input.devices) state.devices = input.devices;
+    if (input.health) state.health = input.health;
 
     const samples: Tick['samples'] = [];
     for (const w of input.wans) {
-      const sample: WanSample = { ts, rxBps: w.rxBps, txBps: w.txBps };
+      const sample: WanSample = { ts, rxBps: w.rxBps, txBps: w.txBps, latencyMs: w.latencyMs };
       const hist = state.histories[w.id] ?? [];
       hist.push(sample);
       if (hist.length > config.history.maxSamples) {
         hist.splice(0, hist.length - config.history.maxSamples);
       }
       state.histories[w.id] = hist;
-      samples.push({ id: w.id, rxBps: w.rxBps, txBps: w.txBps });
+      samples.push({ id: w.id, rxBps: w.rxBps, txBps: w.txBps, latencyMs: w.latencyMs });
     }
 
     const tick: Tick = {
@@ -74,6 +78,7 @@ export const store = {
       ...(input.dpiCategories ? { dpiCategories: input.dpiCategories } : {}),
       ...(input.udm ? { udm: input.udm } : {}),
       ...(input.devices ? { devices: input.devices } : {}),
+      ...(input.health ? { health: input.health } : {}),
     };
 
     for (const l of listeners) {
@@ -97,6 +102,7 @@ export const store = {
       dpiCategories: state.dpiCategories,
       udm: state.udm,
       devices: state.devices,
+      health: state.health,
       features: { ...state.features },
     };
   },

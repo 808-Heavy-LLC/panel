@@ -2,6 +2,7 @@ import { Agent, fetch as undiciFetch } from 'undici';
 import type {
   ClientStat,
   DpiCategory,
+  HealthSubsystem,
   NetworkDevice,
   NetworkPort,
   NetworkRadio,
@@ -24,6 +25,43 @@ type RawHealth = {
   xput_up?: number;
   xput_down?: number;
 };
+
+type RawHealthSubsystem = {
+  subsystem?: string;
+  status?: string;
+  latency?: number;
+  drops?: number;
+  uptime?: number;
+  // www-only
+  xput_up?: number;
+  xput_down?: number;
+  speedtest_lastrun?: number;
+  speedtest_status?: string;
+  // wan-only
+  wan_ip?: string;
+  // lan/wlan
+  num_user?: number;
+  num_guest?: number;
+};
+
+function toHealthSubsystem(h: RawHealthSubsystem): HealthSubsystem {
+  const status: HealthSubsystem['status'] =
+    h.status === 'ok' ? 'ok' : h.status === 'warning' ? 'warning' : 'unknown';
+  return {
+    name: h.subsystem ?? 'unknown',
+    status,
+    latencyMs: typeof h.latency === 'number' ? h.latency : null,
+    drops: typeof h.drops === 'number' ? h.drops : null,
+    uptimeSec: typeof h.uptime === 'number' ? h.uptime : null,
+    xputDownMbps: typeof h.xput_down === 'number' ? h.xput_down : null,
+    xputUpMbps: typeof h.xput_up === 'number' ? h.xput_up : null,
+    speedtestLastRunTs: typeof h.speedtest_lastrun === 'number' ? h.speedtest_lastrun : null,
+    speedtestStatus: h.speedtest_status ?? null,
+    numUser: typeof h.num_user === 'number' ? h.num_user : null,
+    numGuest: typeof h.num_guest === 'number' ? h.num_guest : null,
+    wanIp: h.wan_ip ?? null,
+  };
+}
 
 type RawClient = {
   id?: string;
@@ -494,6 +532,17 @@ export class UnifiClient {
       `/v2/api/site/${this.opts.site}/device?separateUnmanaged=true&includeTrafficUsage=true`,
     );
     return (r.network_devices ?? []).map(toDevice);
+  }
+
+  /** Health subsystems from `/api/s/{site}/stat/health`. UniFi returns
+   *  an array of entries keyed by `subsystem`. We pass through the
+   *  fields useful for the dashboard and skip the rest. */
+  async getHealth(): Promise<HealthSubsystem[]> {
+    if (this.mode !== 'legacy') return [];
+    const r = await this.legacyGet<{ data?: RawHealthSubsystem[] }>(
+      `/api/s/${this.opts.site}/stat/health`,
+    );
+    return (r.data ?? []).map(toHealthSubsystem);
   }
 
   async getUdmInfo(): Promise<UdmInfo | null> {
