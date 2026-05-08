@@ -16,9 +16,10 @@
   import TopologyPanel from '$lib/components/TopologyPanel.svelte';
   import InternetHealthPanel from '$lib/components/InternetHealthPanel.svelte';
   import TopTalkersTotalPanel from '$lib/components/TopTalkersTotalPanel.svelte';
+  import SwitchDetailPanel from '$lib/components/SwitchDetailPanel.svelte';
   import '../app.css';
 
-  const PAGE_COUNT = 4;
+  const PAGE_COUNT = 5;
   const AUTO_CYCLE_MS = 30_000;
   let currentPage = $state(0);
 
@@ -185,6 +186,21 @@
             {/snippet}
             {#snippet children()}
               <TopologyPanel />
+            {/snippet}
+          </HudFrame>
+        </main>
+      </section>
+
+      <!-- ============= PAGE 5: Switch Detail (carousel) ============= -->
+      <section class="page" class:active={currentPage === 4}>
+        <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 1fr; grid-template-rows: 1fr;">
+          <HudFrame label="SWITCH DETAIL" accent="primary">
+            {#snippet actions()}
+              {@const sws = panel.devices.filter((d) => d.type === 'usw').length}
+              <span>{sws} SWITCHES · 7s ROTATION</span>
+            {/snippet}
+            {#snippet children()}
+              <SwitchDetailPanel />
             {/snippet}
           </HudFrame>
         </main>
