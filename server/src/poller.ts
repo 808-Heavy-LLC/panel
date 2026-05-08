@@ -97,12 +97,25 @@ export async function startPoller(): Promise<void> {
     port: config.snmp.port,
   });
 
+  // Retry listInterfaces with backoff: a single transient genErr from the UDM
+  // SNMP agent at startup must not leave the panel WAN-less until the next
+  // service restart.
   let interfaces: SnmpInterface[] = [];
-  try {
-    interfaces = await snmpClient.listInterfaces();
-    console.log(`[poller] SNMP discovered ${interfaces.length} interfaces`);
-  } catch (err) {
-    console.error('[poller] SNMP listInterfaces failed:', err);
+  const backoffsMs = [0, 1000, 2000, 5000, 10000];
+  for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
+    const delay = backoffsMs[attempt] ?? 0;
+    if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+    try {
+      interfaces = await snmpClient.listInterfaces();
+      console.log(`[poller] SNMP discovered ${interfaces.length} interfaces`);
+      break;
+    } catch (err) {
+      const last = attempt === backoffsMs.length - 1;
+      console.error(
+        `[poller] SNMP listInterfaces failed (attempt ${attempt + 1}/${backoffsMs.length})${last ? ' — giving up' : ', retrying'}:`,
+        err,
+      );
+    }
   }
 
   let wanIfaces: SnmpInterface[] = [];

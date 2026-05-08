@@ -69,15 +69,15 @@ export class SnmpClient {
     this.session.close();
   }
 
-  /** Walk the interface table and return summary info for every interface. */
+  /** Walk the interface table and return summary info for every interface.
+   *  Walks run sequentially: the UDM SNMP agent has been observed to return
+   *  genErr when hit with five concurrent subtree requests at boot. */
   async listInterfaces(): Promise<SnmpInterface[]> {
-    const [descrs, aliases, opers, speeds, addrs] = await Promise.all([
-      this.subtree(OID_IF_DESCR),
-      this.subtree(OID_IF_ALIAS),
-      this.subtree(OID_IF_OPER_STATUS),
-      this.subtree(OID_IF_HIGH_SPEED),
-      this.subtree(OID_IF_PHYS_ADDR),
-    ]);
+    const descrs = await this.subtree(OID_IF_DESCR);
+    const aliases = await this.subtree(OID_IF_ALIAS);
+    const opers = await this.subtree(OID_IF_OPER_STATUS);
+    const speeds = await this.subtree(OID_IF_HIGH_SPEED);
+    const addrs = await this.subtree(OID_IF_PHYS_ADDR);
     const ifIndexes = new Set<number>();
     for (const d of descrs) ifIndexes.add(d.index);
     const out: SnmpInterface[] = [];
