@@ -82,6 +82,9 @@
               {:else}
                 <div class="port-rate dim">DOWN</div>
               {/if}
+              {#if p.poeWatts > 0}
+                <div class="port-poe">{p.poeWatts.toFixed(1)} W PoE</div>
+              {/if}
               {#if p.neighbor}
                 <div class="port-neighbor truncate" title={p.neighbor.systemName ?? p.neighbor.chassisId}>
                   ↳ {p.neighbor.systemName ?? p.neighbor.chassisId.slice(0, 8) + '…'}
@@ -232,6 +235,12 @@
     font-size: 9px;
     color: var(--c-text-dim);
     font-weight: 400;
+  }
+  .port-poe {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--c-secondary);
+    letter-spacing: 0.04em;
   }
   .port-neighbor {
     font-family: var(--font-mono);

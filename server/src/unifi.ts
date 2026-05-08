@@ -626,7 +626,13 @@ function toPort(
   p: NonNullable<RawV2Device['port_table']>[number],
   deviceLldp: Map<number, PortNeighbor>,
 ): NetworkPort {
-  const poeWatts = p.poe_enable && p.poe_power ? Number.parseFloat(p.poe_power) : 0;
+  // PoE: trust whatever we can parse from poe_power. The poe_enable
+  // field is unreliable across UniFi firmwares (often missing or false
+  // on ports that are actively delivering power), so just gate on the
+  // power reading itself.
+  const poeRaw = p.poe_power ?? '';
+  const parsedPoe = poeRaw ? Number.parseFloat(poeRaw) : 0;
+  const poeWatts = Number.isFinite(parsedPoe) && parsedPoe > 0 ? parsedPoe : 0;
   const idx = p.port_idx ?? 0;
   const neighbor = neighborFromPort(p) ?? deviceLldp.get(idx) ?? null;
   return {
@@ -635,7 +641,7 @@ function toPort(
     up: p.up === true,
     speedMbps: p.speed ?? 0,
     isUplink: p.is_uplink === true,
-    poeWatts: Number.isFinite(poeWatts) ? poeWatts : 0,
+    poeWatts,
     rxBps: p['rx_bytes-r'] ?? 0,
     txBps: p['tx_bytes-r'] ?? 0,
     neighbor,
