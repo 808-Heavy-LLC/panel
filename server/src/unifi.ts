@@ -539,22 +539,30 @@ export class UnifiClient {
     if (!this.debuggedPoe) {
       this.debuggedPoe = true;
       try {
-        // Cross-check the legacy endpoint, which on most firmwares
-        // exposes poe_power per port (the v2 device endpoint doesn't).
         const legacy = await this.legacyGet<{
           data?: Array<{ name?: string; type?: string; mac?: string; port_table?: Array<Record<string, unknown>> }>;
         }>(`/api/s/${this.opts.site}/stat/device`);
-        const sw = (legacy.data ?? []).find((d) => d.type === 'usw');
-        const sample = sw?.port_table?.find((p) => p['port_poe'] === true) ?? sw?.port_table?.[0];
-        if (sample) {
-          const poeKeys: Record<string, unknown> = {};
-          for (const k of Object.keys(sample)) {
-            if (k.toLowerCase().includes('poe') || k.toLowerCase().includes('power')) {
-              poeKeys[k] = sample[k];
+        let totalActive = 0;
+        let totalWatts = 0;
+        for (const d of legacy.data ?? []) {
+          if (d.type !== 'usw') continue;
+          for (const p of d.port_table ?? []) {
+            const w = Number.parseFloat(String(p['poe_power'] ?? '0'));
+            if (Number.isFinite(w) && w > 0) {
+              totalActive++;
+              totalWatts += w;
+              if (totalActive <= 4) {
+                console.log(
+                  `[unifi] PoE active — sw=${d.name} port=${p['name']} ` +
+                    `poe_power=${p['poe_power']} poe_enable=${p['poe_enable']} ` +
+                    `port_poe=${p['port_poe']} poe_mode=${p['poe_mode']} ` +
+                    `poe_voltage=${p['poe_voltage']} poe_current=${p['poe_current']}`,
+                );
+              }
             }
           }
-          console.log(`[unifi] PoE debug (legacy stat/device) — switch=${sw?.name} port=${sample['name']} poe-fields=${JSON.stringify(poeKeys)}`);
         }
+        console.log(`[unifi] PoE summary — active ports=${totalActive} total=${totalWatts.toFixed(1)}W (legacy /stat/device)`);
       } catch (e) {
         console.error('[unifi] PoE debug legacy fetch failed:', e);
       }
