@@ -14,9 +14,9 @@
   import SwitchesPanel from '$lib/components/SwitchesPanel.svelte';
   import RadiosPanel from '$lib/components/RadiosPanel.svelte';
   import TopologyPanel from '$lib/components/TopologyPanel.svelte';
-  import InternetHealthPanel from '$lib/components/InternetHealthPanel.svelte';
   import TopTalkersTotalPanel from '$lib/components/TopTalkersTotalPanel.svelte';
   import SwitchDetailPanel from '$lib/components/SwitchDetailPanel.svelte';
+  import WanStatusCard from '$lib/components/WanStatusCard.svelte';
   import '../app.css';
 
   const PAGE_COUNT = 5;
@@ -66,7 +66,7 @@
 
   <div class="page-viewport min-h-0 flex-1 overflow-hidden">
     <div class="page-stage">
-      <!-- ============= PAGE 1: Internet / Traffic ============= -->
+      <!-- ============= PAGE 1: Network (WAN traffic + per-WAN status) ============= -->
       <section class="page" class:active={currentPage === 0}>
         <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 2fr 1fr 1fr; grid-template-rows: 1.1fr 1fr;">
           <div style="grid-column: 1 / 3" class="min-h-0 min-w-0">
@@ -100,12 +100,44 @@
             {/snippet}
           </HudFrame>
 
+          <!-- Bottom row spans the full width and lays out one card per WAN. -->
+          <div class="min-h-0 min-w-0 grid gap-4" style="grid-column: 1 / 4; grid-template-columns: repeat({Math.max(1, panel.wans.length)}, 1fr);">
+            {#each panel.wans as wan (wan.id)}
+              <HudFrame label={wan.label.toUpperCase()} accent="primary">
+                {#snippet actions()}
+                  {@const h = panel.health.find((x) => x.name === wan.id) ?? panel.health.find((x) => x.name === 'wan') ?? null}
+                  <span>
+                    {(h?.status ?? wan.status).toUpperCase()}
+                    {#if h?.latencyMs != null} · {h.latencyMs}ms{/if}
+                  </span>
+                {/snippet}
+                {#snippet children()}
+                  <WanStatusCard wanId={wan.id} />
+                {/snippet}
+              </HudFrame>
+            {/each}
+          </div>
+        </main>
+      </section>
+
+      <!-- ============= PAGE 2: Clients ============= -->
+      <section class="page" class:active={currentPage === 1}>
+        <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;">
           <HudFrame label="TOP CONSUMERS" accent="primary">
             {#snippet actions()}
               <span>BY THROUGHPUT</span>
             {/snippet}
             {#snippet children()}
               <ClientsPanel />
+            {/snippet}
+          </HudFrame>
+
+          <HudFrame label="TOP TALKERS · SESSION" accent="primary">
+            {#snippet actions()}
+              <span>{panel.clients.length} CLIENTS</span>
+            {/snippet}
+            {#snippet children()}
+              <TopTalkersTotalPanel />
             {/snippet}
           </HudFrame>
 
@@ -123,8 +155,8 @@
         </main>
       </section>
 
-      <!-- ============= PAGE 2: Layer 2 ============= -->
-      <section class="page" class:active={currentPage === 1}>
+      <!-- ============= PAGE 3: Layer 2 ============= -->
+      <section class="page" class:active={currentPage === 2}>
         <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 1fr 1fr; grid-template-rows: 1.2fr 1fr;">
           <HudFrame label="ACCESS POINTS" accent="primary">
             {#snippet actions()}
@@ -157,35 +189,24 @@
         </main>
       </section>
 
-      <!-- ============= PAGE 4: Internet Health + Top Talkers ============= -->
+      <!-- ============= PAGE 4: Switch Detail (carousel) ============= -->
       <section class="page" class:active={currentPage === 3}>
-        <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 1fr 1fr; grid-template-rows: 1fr;">
-          <HudFrame label="INTERNET HEALTH" accent="primary">
+        <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 1fr; grid-template-rows: 1fr;">
+          <HudFrame label="SWITCH DETAIL" accent="primary">
             {#snippet actions()}
-              {@const www = panel.health.find((h) => h.name === 'www')}
-              <span>
-                {www?.status ? www.status.toUpperCase() : '—'}
-                {#if www?.latencyMs != null} · {www.latencyMs}ms{/if}
-              </span>
+              {@const sws = panel.devices.filter((d) => d.type === 'usw').length}
+              {@const groups = Math.max(1, Math.ceil(sws / 6))}
+              <span>{sws} SWITCHES · {groups > 1 ? `${groups} GROUPS · 12s` : 'SINGLE PAGE'}</span>
             {/snippet}
             {#snippet children()}
-              <InternetHealthPanel />
-            {/snippet}
-          </HudFrame>
-
-          <HudFrame label="TOP TALKERS · SESSION" accent="primary">
-            {#snippet actions()}
-              <span>{panel.clients.length} CLIENTS</span>
-            {/snippet}
-            {#snippet children()}
-              <TopTalkersTotalPanel />
+              <SwitchDetailPanel />
             {/snippet}
           </HudFrame>
         </main>
       </section>
 
-      <!-- ============= PAGE 3: Topology ============= -->
-      <section class="page" class:active={currentPage === 2}>
+      <!-- ============= PAGE 5: Topology ============= -->
+      <section class="page" class:active={currentPage === 4}>
         <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 1fr; grid-template-rows: 1fr;">
           <HudFrame label="TOPOLOGY · LLDP" accent="primary">
             {#snippet actions()}
@@ -194,22 +215,6 @@
             {/snippet}
             {#snippet children()}
               <TopologyPanel />
-            {/snippet}
-          </HudFrame>
-        </main>
-      </section>
-
-      <!-- ============= PAGE 5: Switch Detail (carousel) ============= -->
-      <section class="page" class:active={currentPage === 4}>
-        <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 1fr; grid-template-rows: 1fr;">
-          <HudFrame label="SWITCH DETAIL" accent="primary">
-            {#snippet actions()}
-              {@const sws = panel.devices.filter((d) => d.type === 'usw').length}
-              {@const groups = Math.max(1, Math.ceil(sws / 4))}
-              <span>{sws} SWITCHES · {groups > 1 ? `${groups} GROUPS · 12s` : 'SINGLE PAGE'}</span>
-            {/snippet}
-            {#snippet children()}
-              <SwitchDetailPanel />
             {/snippet}
           </HudFrame>
         </main>
