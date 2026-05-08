@@ -526,11 +526,34 @@ export class UnifiClient {
     return { apps, categories };
   }
 
+  // One-shot debug: print the raw port_table for the first switch we
+  // see, so we can confirm which PoE-related fields the firmware exposes.
+  // Remove once we've captured enough.
+  private debuggedPoe = false;
+
   async getDevices(): Promise<NetworkDevice[]> {
     if (this.mode !== 'legacy') return [];
     const r = await this.legacyGet<{ network_devices?: RawV2Device[] }>(
       `/v2/api/site/${this.opts.site}/device?separateUnmanaged=true&includeTrafficUsage=true`,
     );
+    if (!this.debuggedPoe) {
+      const sw = (r.network_devices ?? []).find((d) => d.type === 'usw');
+      const sample = sw?.port_table?.find((p) => {
+        const obj = p as unknown as Record<string, unknown>;
+        return Object.keys(obj).some((k) => k.toLowerCase().startsWith('poe'));
+      }) ?? sw?.port_table?.[0];
+      if (sample) {
+        const obj = sample as unknown as Record<string, unknown>;
+        const poeKeys: Record<string, unknown> = {};
+        for (const k of Object.keys(obj)) {
+          if (k.toLowerCase().includes('poe') || k.toLowerCase().includes('power')) {
+            poeKeys[k] = obj[k];
+          }
+        }
+        console.log(`[unifi] PoE debug — switch=${sw?.name} port=${(sample as { name?: string }).name} poe-fields=${JSON.stringify(poeKeys)}`);
+        this.debuggedPoe = true;
+      }
+    }
     return (r.network_devices ?? []).map(toDevice);
   }
 
