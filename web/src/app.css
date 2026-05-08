@@ -261,8 +261,7 @@ body {
 }
 
 html[data-kiosk='1'],
-html[data-kiosk='1'] body,
-html[data-kiosk='1'] * {
+html[data-kiosk='1'] body {
   cursor: none !important;
 }
 

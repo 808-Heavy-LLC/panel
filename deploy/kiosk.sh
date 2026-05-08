@@ -38,13 +38,16 @@ if [ -z "${BROWSER:-}" ]; then
   exit 1
 fi
 
-# Pick the right Ozone platform. --ozone-platform-hint=auto isn't reliable on
-# Debian's chromium build, so we force the matching backend explicitly.
-PLATFORM_FLAG=""
-if [ -n "${WAYLAND_DISPLAY:-}" ] || [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
-  PLATFORM_FLAG="--ozone-platform=wayland"
-elif [ -n "${DISPLAY:-}" ]; then
-  PLATFORM_FLAG="--ozone-platform=x11"
+# Force X11/XWayland even on Wayland sessions: Chromium-on-Wayland doesn't
+# honor CSS `cursor: none`, and `unclutter` (X11/XFixes) is the reliable
+# cursor-hider. labwc starts XWayland so DISPLAY=:0 is available.
+export DISPLAY="${DISPLAY:-:0}"
+PLATFORM_FLAG="--ozone-platform=x11"
+
+# Hide the X cursor immediately (idle=0).
+if command -v unclutter >/dev/null 2>&1; then
+  pkill -x unclutter 2>/dev/null || true
+  unclutter -idle 0 -root &
 fi
 
 exec "$BROWSER" \
