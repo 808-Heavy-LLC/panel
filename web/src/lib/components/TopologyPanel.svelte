@@ -23,7 +23,7 @@
   };
 
   // Bandwidth is recomputed every tick and drives label/thickness.
-  const topology = $derived<Topology>(buildTopology(panel.devices));
+  const topology = $derived<Topology>(buildTopology(panel.devices, panel.wans));
   let layout = $state<Layout | null>(null);
 
   // Signature over the *structural* parts of the topology so we don't
@@ -196,47 +196,76 @@
       {#each topology.nodes as node (node.id)}
         {@const pos = layout.nodes.get(node.id)}
         {#if pos}
-          {@const d = node.device}
-          {@const fmt = formatBps(d.bytesRate)}
-          <g
-            class="node"
-            class:up={d.state === 1}
-            class:udm={d.type === 'udm'}
-            class:usw={d.type === 'usw'}
-            class:uap={d.type === 'uap'}
-            transform="translate({pos.x},{pos.y})"
-          >
-            <rect
-              width={NODE_W}
-              height={NODE_H}
-              fill="var(--c-bg-panel)"
-              stroke="var(--c-line-bright)"
-              stroke-width="1"
-              class="node-bg"
-            />
-            <rect
-              x="0"
-              y="0"
-              width="3"
-              height={NODE_H}
-              class="node-rail"
-            />
-            <text x="12" y="16" class="node-name">{d.name}</text>
-            <text x="12" y="30" class="node-meta">
-              {deviceTypeLabel(d.type)} · {d.model || '—'}
-            </text>
-            <text x={NODE_W - 10} y={NODE_H - 10} text-anchor="end" class="node-rate">
-              <tspan class="node-rate-val">{fmt.value}</tspan>
-              <tspan class="node-rate-unit"> {fmt.unit}</tspan>
-            </text>
-            <circle
-              cx={NODE_W - 12}
-              cy="12"
-              r="3.5"
-              class="state-dot"
-              fill={d.state === 1 ? 'var(--c-ok)' : 'var(--c-err)'}
-            />
-          </g>
+          {#if node.kind === 'wan'}
+            {@const w = node.wan}
+            {@const fmtRx = formatBps(w.rxBps)}
+            {@const fmtTx = formatBps(w.txBps)}
+            <g class="node wan" class:up={w.status === 'ok'} transform="translate({pos.x},{pos.y})">
+              <rect
+                width={NODE_W}
+                height={NODE_H}
+                fill="var(--c-bg-panel)"
+                stroke="var(--c-secondary)"
+                stroke-width="1"
+              />
+              <rect x="0" y="0" width="3" height={NODE_H} class="node-rail" />
+              <text x="12" y="16" class="node-name">{w.label}</text>
+              <text x="12" y="30" class="node-meta">
+                WAN · {w.speedBitsPerSec >= 1e9
+                  ? `${(w.speedBitsPerSec / 1e9).toFixed(0)}G`
+                  : `${(w.speedBitsPerSec / 1e6).toFixed(0)}M`}
+              </text>
+              <text x={NODE_W - 10} y={30} text-anchor="end" class="wan-rx">
+                ↓ {fmtRx.value}<tspan class="node-rate-unit"> {fmtRx.unit}</tspan>
+              </text>
+              <text x={NODE_W - 10} y={NODE_H - 10} text-anchor="end" class="wan-tx">
+                ↑ {fmtTx.value}<tspan class="node-rate-unit"> {fmtTx.unit}</tspan>
+              </text>
+              <circle
+                cx={NODE_W - 12}
+                cy="12"
+                r="3.5"
+                class="state-dot"
+                fill={w.status === 'ok' ? 'var(--c-ok)' : 'var(--c-err)'}
+              />
+            </g>
+          {:else}
+            {@const d = node.device}
+            {@const fmt = formatBps(d.bytesRate)}
+            <g
+              class="node"
+              class:up={d.state === 1}
+              class:udm={d.type === 'udm'}
+              class:usw={d.type === 'usw'}
+              class:uap={d.type === 'uap'}
+              transform="translate({pos.x},{pos.y})"
+            >
+              <rect
+                width={NODE_W}
+                height={NODE_H}
+                fill="var(--c-bg-panel)"
+                stroke="var(--c-line-bright)"
+                stroke-width="1"
+                class="node-bg"
+              />
+              <rect x="0" y="0" width="3" height={NODE_H} class="node-rail" />
+              <text x="12" y="16" class="node-name">{d.name}</text>
+              <text x="12" y="30" class="node-meta">
+                {deviceTypeLabel(d.type)} · {d.model || '—'}
+              </text>
+              <text x={NODE_W - 10} y={NODE_H - 10} text-anchor="end" class="node-rate">
+                <tspan class="node-rate-val">{fmt.value}</tspan>
+                <tspan class="node-rate-unit"> {fmt.unit}</tspan>
+              </text>
+              <circle
+                cx={NODE_W - 12}
+                cy="12"
+                r="3.5"
+                class="state-dot"
+                fill={d.state === 1 ? 'var(--c-ok)' : 'var(--c-err)'}
+              />
+            </g>
+          {/if}
         {/if}
       {/each}
     </svg>
@@ -273,6 +302,9 @@
   .node-rail {
     fill: var(--c-line);
   }
+  .node.up.wan .node-rail {
+    fill: var(--c-secondary);
+  }
   .node.up.udm .node-rail {
     fill: var(--c-secondary);
   }
@@ -281,6 +313,16 @@
   }
   .node.up.uap .node-rail {
     fill: var(--c-ok);
+  }
+  .wan-rx {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    fill: var(--c-primary);
+  }
+  .wan-tx {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    fill: var(--c-secondary);
   }
   .node-name {
     font-family: var(--font-display);
