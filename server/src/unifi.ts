@@ -537,21 +537,26 @@ export class UnifiClient {
       `/v2/api/site/${this.opts.site}/device?separateUnmanaged=true&includeTrafficUsage=true`,
     );
     if (!this.debuggedPoe) {
-      const sw = (r.network_devices ?? []).find((d) => d.type === 'usw');
-      const sample = sw?.port_table?.find((p) => {
-        const obj = p as unknown as Record<string, unknown>;
-        return Object.keys(obj).some((k) => k.toLowerCase().startsWith('poe'));
-      }) ?? sw?.port_table?.[0];
-      if (sample) {
-        const obj = sample as unknown as Record<string, unknown>;
-        const poeKeys: Record<string, unknown> = {};
-        for (const k of Object.keys(obj)) {
-          if (k.toLowerCase().includes('poe') || k.toLowerCase().includes('power')) {
-            poeKeys[k] = obj[k];
+      this.debuggedPoe = true;
+      try {
+        // Cross-check the legacy endpoint, which on most firmwares
+        // exposes poe_power per port (the v2 device endpoint doesn't).
+        const legacy = await this.legacyGet<{
+          data?: Array<{ name?: string; type?: string; mac?: string; port_table?: Array<Record<string, unknown>> }>;
+        }>(`/api/s/${this.opts.site}/stat/device`);
+        const sw = (legacy.data ?? []).find((d) => d.type === 'usw');
+        const sample = sw?.port_table?.find((p) => p['port_poe'] === true) ?? sw?.port_table?.[0];
+        if (sample) {
+          const poeKeys: Record<string, unknown> = {};
+          for (const k of Object.keys(sample)) {
+            if (k.toLowerCase().includes('poe') || k.toLowerCase().includes('power')) {
+              poeKeys[k] = sample[k];
+            }
           }
+          console.log(`[unifi] PoE debug (legacy stat/device) — switch=${sw?.name} port=${sample['name']} poe-fields=${JSON.stringify(poeKeys)}`);
         }
-        console.log(`[unifi] PoE debug — switch=${sw?.name} port=${(sample as { name?: string }).name} poe-fields=${JSON.stringify(poeKeys)}`);
-        this.debuggedPoe = true;
+      } catch (e) {
+        console.error('[unifi] PoE debug legacy fetch failed:', e);
       }
     }
     return (r.network_devices ?? []).map(toDevice);
