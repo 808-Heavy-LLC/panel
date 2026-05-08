@@ -18,44 +18,10 @@
 
   const PAGE_COUNT = 3;
   const AUTO_CYCLE_MS = 30_000;
-  // Track-slide duration. CSS reads it via the inline `--track-ms`
-  // custom property below, so JS and CSS can't drift.
-  const TRACK_MS = 700;
-  // displayIdx ranges 0..PAGE_COUNT. The slot at PAGE_COUNT is a clone
-  // of page 0 rendered after the last page, so the auto-cycle keeps
-  // sliding right-to-left forever — when we land on the clone we
-  // teleport back to displayIdx 0 with the transition disabled, then
-  // re-enable it on the next frame. Result: visually identical to
-  // 1,2,3,1,2,3,…
-  let displayIdx = $state(0);
-  let animate = $state(true);
-  const activeDot = $derived(displayIdx >= PAGE_COUNT ? 0 : displayIdx);
-
-  function snapTo(idx: number): void {
-    animate = false;
-    displayIdx = idx;
-    // Two rAFs: the first lets the no-transition transform commit;
-    // the second re-enables animation for the next user-driven slide.
-    requestAnimationFrame(() => requestAnimationFrame(() => (animate = true)));
-  }
+  let currentPage = $state(0);
 
   function go(delta: 1 | -1): void {
-    if (delta === 1) {
-      // Block while we're sitting on the clone — the snap-back is
-      // already scheduled.
-      if (displayIdx >= PAGE_COUNT) return;
-      displayIdx += 1;
-      if (displayIdx === PAGE_COUNT) {
-        // Schedule the teleport for just after the slide finishes.
-        // Using a timer (vs. transitionend) avoids the bug where
-        // unrelated child transitions inside the page bubble up and
-        // fire the handler mid-slide.
-        window.setTimeout(() => snapTo(0), TRACK_MS + 30);
-      }
-    } else {
-      if (displayIdx <= 0) snapTo(PAGE_COUNT - 1);
-      else displayIdx -= 1;
-    }
+    currentPage = (currentPage + delta + PAGE_COUNT) % PAGE_COUNT;
   }
 
   onMount(() => {
@@ -87,69 +53,64 @@
 <div class="panel-root flex h-screen w-screen flex-col">
   <HudHeader />
 
-  {#snippet page1Content()}
-    <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 2fr 1fr 1fr; grid-template-rows: 1.1fr 1fr;">
-      <div style="grid-column: 1 / 3" class="min-h-0 min-w-0">
-        <HudFrame label="WAN THROUGHPUT" accent="primary">
-          {#snippet actions()}
-            <span>WINDOW · 90s</span>
-          {/snippet}
-          {#snippet children()}
-            <div class="flex h-full flex-col gap-3">
-              {#each panel.wans as wan (wan.id)}
-                <div class="min-h-0 flex-1">
-                  <BandwidthChart wanId={wan.id} />
-                </div>
-                {#if wan.id !== panel.wans[panel.wans.length - 1]?.id}
-                  <div class="border-t border-[var(--c-line)]"></div>
-                {/if}
-              {/each}
-              {#if panel.wans.length === 0}
-                <div class="grid h-full place-items-center text-[11px] uppercase tracking-widest text-[var(--c-text-dim)]">
-                  Awaiting WAN data…
-                </div>
-              {/if}
-            </div>
-          {/snippet}
-        </HudFrame>
-      </div>
-
-      <HudFrame label="GATEWAY · UDM PRO MAX" accent="secondary">
-        {#snippet children()}
-          <UdmStats />
-        {/snippet}
-      </HudFrame>
-
-      <HudFrame label="TOP CONSUMERS" accent="primary">
-        {#snippet actions()}
-          <span>BY THROUGHPUT</span>
-        {/snippet}
-        {#snippet children()}
-          <ClientsPanel />
-        {/snippet}
-      </HudFrame>
-
-      <HudFrame label="TOP APPLICATIONS" accent="primary">
-        {#snippet children()}
-          <DpiPanel source="apps" />
-        {/snippet}
-      </HudFrame>
-
-      <HudFrame label="TOP CATEGORIES" accent="primary">
-        {#snippet children()}
-          <DpiPanel source="categories" />
-        {/snippet}
-      </HudFrame>
-    </main>
-  {/snippet}
-
   <div class="page-viewport min-h-0 flex-1 overflow-hidden">
-    <div
-      class="page-track"
-      style="--track-ms: {TRACK_MS}ms; transform: translateX(-{displayIdx * 100}%); {animate ? '' : 'transition: none;'}"
-    >
+    <div class="page-track" style="transform: translateX(-{currentPage * 100}%);">
       <!-- ============= PAGE 1: Internet / Traffic ============= -->
-      <section class="page">{@render page1Content()}</section>
+      <section class="page">
+        <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 2fr 1fr 1fr; grid-template-rows: 1.1fr 1fr;">
+          <div style="grid-column: 1 / 3" class="min-h-0 min-w-0">
+            <HudFrame label="WAN THROUGHPUT" accent="primary">
+              {#snippet actions()}
+                <span>WINDOW · 90s</span>
+              {/snippet}
+              {#snippet children()}
+                <div class="flex h-full flex-col gap-3">
+                  {#each panel.wans as wan (wan.id)}
+                    <div class="min-h-0 flex-1">
+                      <BandwidthChart wanId={wan.id} />
+                    </div>
+                    {#if wan.id !== panel.wans[panel.wans.length - 1]?.id}
+                      <div class="border-t border-[var(--c-line)]"></div>
+                    {/if}
+                  {/each}
+                  {#if panel.wans.length === 0}
+                    <div class="grid h-full place-items-center text-[11px] uppercase tracking-widest text-[var(--c-text-dim)]">
+                      Awaiting WAN data…
+                    </div>
+                  {/if}
+                </div>
+              {/snippet}
+            </HudFrame>
+          </div>
+
+          <HudFrame label="GATEWAY · UDM PRO MAX" accent="secondary">
+            {#snippet children()}
+              <UdmStats />
+            {/snippet}
+          </HudFrame>
+
+          <HudFrame label="TOP CONSUMERS" accent="primary">
+            {#snippet actions()}
+              <span>BY THROUGHPUT</span>
+            {/snippet}
+            {#snippet children()}
+              <ClientsPanel />
+            {/snippet}
+          </HudFrame>
+
+          <HudFrame label="TOP APPLICATIONS" accent="primary">
+            {#snippet children()}
+              <DpiPanel source="apps" />
+            {/snippet}
+          </HudFrame>
+
+          <HudFrame label="TOP CATEGORIES" accent="primary">
+            {#snippet children()}
+              <DpiPanel source="categories" />
+            {/snippet}
+          </HudFrame>
+        </main>
+      </section>
 
       <!-- ============= PAGE 2: Layer 2 ============= -->
       <section class="page">
@@ -199,18 +160,12 @@
           </HudFrame>
         </main>
       </section>
-
-      <!-- Wrap clone: rendered after Page 3 so the auto-cycle slides
-           continuously rightward through this duplicate of Page 1. The
-           transition-end handler snaps displayIdx back to 0 with no
-           animation so the user never sees the rewind. -->
-      <section class="page" aria-hidden="true">{@render page1Content()}</section>
     </div>
   </div>
 
   <div class="page-dots">
     {#each Array(PAGE_COUNT) as _, i}
-      <span class="dot" class:active={activeDot === i}></span>
+      <span class="dot" class:active={currentPage === i}></span>
     {/each}
   </div>
 </div>
@@ -229,7 +184,7 @@
     flex-direction: row;
     height: 100%;
     width: 100%;
-    transition: transform var(--track-ms, 700ms) cubic-bezier(0.65, 0, 0.35, 1);
+    transition: transform 700ms cubic-bezier(0.65, 0, 0.35, 1);
     will-change: transform;
   }
   .page {
