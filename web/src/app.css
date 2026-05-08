@@ -1,7 +1,5 @@
 @import 'tailwindcss';
-@import '@fontsource/orbitron/400.css';
-@import '@fontsource/orbitron/600.css';
-@import '@fontsource/orbitron/700.css';
+@import '@fontsource-variable/inter';
 @import '@fontsource-variable/jetbrains-mono';
 
 /* ============================================================
@@ -20,45 +18,49 @@
 
 :root,
 [data-theme='hud'] {
-  --c-bg: #06080c;
-  --c-bg-panel: #0a1018;
-  --c-bg-panel-2: #0d1622;
-  --c-bg-overlay: rgba(6, 8, 12, 0.7);
+  /* NOC-style dark theme: legible at distance, low neon, tuned for
+     a kiosk monitor. Display font is Inter (variable) for clean
+     letterforms; data still uses JetBrains Mono. */
+  --c-bg: #0b0f17;
+  --c-bg-panel: #121826;
+  --c-bg-panel-2: #19223a;
+  --c-bg-overlay: rgba(11, 15, 23, 0.7);
 
-  --c-line: #1a2838;
-  --c-line-bright: #2a4258;
+  --c-line: #1f2a3d;
+  --c-line-bright: #2e3d56;
 
-  --c-primary: #00d9ff;
-  --c-secondary: #ffb000;
-  --c-ok: #00ff9c;
-  --c-warn: #ffb000;
-  --c-err: #ff3a5c;
+  --c-primary: #5db8ff;
+  --c-secondary: #ffb454;
+  --c-ok: #4ade80;
+  --c-warn: #fbbf24;
+  --c-err: #f87171;
 
-  --c-text-bright: #d8ecff;
-  --c-text: #8aa3bd;
-  --c-text-dim: #4a5d75;
+  --c-text-bright: #ecf2fb;
+  --c-text: #94a3b8;
+  --c-text-dim: #607189;
 
-  --dpi-1: #00d9ff;
-  --dpi-2: #ffb000;
-  --dpi-3: #00ff9c;
-  --dpi-4: #ff4ad9;
-  --dpi-5: #ff3a5c;
-  --dpi-6: #7eb8ff;
-  --dpi-7: #ff8a3c;
-  --dpi-8: #9affd6;
+  --dpi-1: #5db8ff;
+  --dpi-2: #ffb454;
+  --dpi-3: #4ade80;
+  --dpi-4: #f472b6;
+  --dpi-5: #f87171;
+  --dpi-6: #a78bfa;
+  --dpi-7: #fb923c;
+  --dpi-8: #34d399;
 
-  --font-display: 'Orbitron', system-ui, sans-serif;
+  --font-display: 'Inter Variable', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace;
 
   --frame-corner: 14px;
   --frame-border-blend: linear-gradient(135deg, var(--c-primary) 0%, var(--c-line-bright) 30%, var(--c-line-bright) 70%, var(--c-secondary) 100%);
-  --glow-mult: 1;
+  /* Glow is now a soft halo, not a blur of the letterforms themselves. */
+  --glow-mult: 0.45;
 
-  --bg-radial-1: radial-gradient(ellipse at top, color-mix(in oklab, var(--c-primary) 6%, transparent), transparent 60%);
-  --bg-radial-2: radial-gradient(ellipse at bottom right, color-mix(in oklab, var(--c-secondary) 4%, transparent), transparent 60%);
+  --bg-radial-1: radial-gradient(ellipse at top, color-mix(in oklab, var(--c-primary) 5%, transparent), transparent 60%);
+  --bg-radial-2: radial-gradient(ellipse at bottom right, color-mix(in oklab, var(--c-secondary) 3%, transparent), transparent 60%);
 
-  --noise-opacity: 0.04;
-  --scanline-opacity: 0.015;
+  --noise-opacity: 0.025;
+  --scanline-opacity: 0.01;
   --scanline-step: 4px;
 }
 
@@ -208,10 +210,10 @@ body {
 .hud-label {
   font-family: var(--font-display);
   font-weight: 600;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--c-primary);
-  text-shadow: 0 0 calc(8px * var(--glow-mult)) color-mix(in oklab, var(--c-primary) 40%, transparent);
+  text-shadow: 0 0 calc(6px * var(--glow-mult)) color-mix(in oklab, var(--c-primary) 35%, transparent);
 }
 
 .hud-value-primary {
