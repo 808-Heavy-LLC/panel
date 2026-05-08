@@ -119,6 +119,106 @@
 }
 
 /* ============================================================
+   Xbox-theme background animation: a slow central glow that
+   "breathes," plus three concentric green rings continuously
+   expanding outward from center. CSS-only and GPU-accelerated
+   (transform/opacity), so the Pi handles it fine. Hidden on
+   non-Xbox themes.
+   ============================================================ */
+
+.xbox-bg {
+  display: none;
+}
+
+[data-theme='xbox'] .xbox-bg {
+  display: block;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+[data-theme='xbox'] .panel-root > :not(.xbox-bg) {
+  position: relative;
+  z-index: 1;
+}
+
+.xbox-pulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 80vmax;
+  height: 80vmax;
+  margin: -40vmax 0 0 -40vmax;
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--c-primary) 28%, transparent) 0%,
+    color-mix(in oklab, var(--c-primary) 8%, transparent) 30%,
+    transparent 60%
+  );
+  animation: xbox-pulse 7s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes xbox-pulse {
+  0%,
+  100% {
+    transform: scale(0.95);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.95;
+  }
+}
+
+.xbox-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 220px;
+  height: 220px;
+  margin: -110px 0 0 -110px;
+  border: 1px solid color-mix(in oklab, var(--c-primary) 70%, transparent);
+  border-radius: 50%;
+  opacity: 0;
+  box-shadow: 0 0 calc(12px * var(--glow-mult)) color-mix(in oklab, var(--c-primary) 50%, transparent);
+  animation: xbox-ring 9s linear infinite;
+  will-change: transform, opacity;
+}
+.xbox-ring-2 {
+  animation-delay: 3s;
+}
+.xbox-ring-3 {
+  animation-delay: 6s;
+}
+
+@keyframes xbox-ring {
+  0% {
+    transform: scale(0.15);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(9);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xbox-pulse,
+  .xbox-ring {
+    animation: none;
+  }
+  .xbox-pulse {
+    opacity: 0.7;
+  }
+}
+
+/* ============================================================
    Global resets + body chrome
    ============================================================ */
 

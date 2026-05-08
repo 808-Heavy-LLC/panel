@@ -53,7 +53,15 @@
   });
 </script>
 
-<div class="panel-root flex h-screen w-screen flex-col">
+<div class="panel-root relative flex h-screen w-screen flex-col">
+  <!-- Xbox-theme-only background animation: central pulse + expanding rings.
+       Hidden in other themes via app.css. -->
+  <div class="xbox-bg" aria-hidden="true">
+    <div class="xbox-pulse"></div>
+    <div class="xbox-ring"></div>
+    <div class="xbox-ring xbox-ring-2"></div>
+    <div class="xbox-ring xbox-ring-3"></div>
+  </div>
   <HudHeader />
 
   <div class="page-viewport min-h-0 flex-1 overflow-hidden">
