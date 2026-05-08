@@ -5,7 +5,7 @@
   import { formatBps } from '$lib/format';
 
   const NODE_W = 168;
-  const NODE_H = 60;
+  const NODE_H = 52;
   // Edge thickness scales linearly with utilization; idle links still
   // get a faint hairline so the structure is visible.
   const EDGE_MIN_PX = 1.2;
@@ -59,8 +59,8 @@
         'elk.algorithm': 'layered',
         'elk.direction': 'DOWN',
         'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
-        'elk.spacing.nodeNode': '32',
-        'elk.layered.spacing.nodeNodeBetweenLayers': '72',
+        'elk.spacing.nodeNode': '24',
+        'elk.layered.spacing.nodeNodeBetweenLayers': '44',
         'elk.edgeRouting': 'ORTHOGONAL',
         'elk.layered.crossingMinimization.semiInteractive': 'true',
       },
@@ -141,7 +141,7 @@
   {:else}
     <svg
       class="topo-svg"
-      viewBox="-20 -20 {layout.width + 40} {layout.height + 40}"
+      viewBox="-10 -10 {layout.width + 20} {layout.height + 20}"
       preserveAspectRatio="xMidYMid meet"
     >
       <!-- Edges first so nodes render on top. -->
