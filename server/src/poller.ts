@@ -1,9 +1,49 @@
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { config } from './config.js';
 import { mockClients, mockDevices, mockDpi, mockHealth, mockUdm, mockWans } from './mock.js';
 import { autoDetectWanInterfaces, SnmpClient, type SnmpInterface } from './snmp.js';
 import { store } from './store.js';
 import type { ClientStat, DpiCategory, HealthSubsystem, NetworkDevice, UdmInfo, Wan } from './types.js';
-import { UnifiClient } from './unifi.js';
+import { type GatewayWanDetails, UnifiClient } from './unifi.js';
+
+/** Month-to-date counters per WAN, persisted across restarts.
+ *
+ *  The scheme is delta-based: each tick we compute `currentTotal - lastTotal`,
+ *  add it to `monthRx/monthTx`, and update `lastTotal`. A negative delta
+ *  (UDM/SNMP counter reset) is treated as 0. On month rollover the
+ *  monthly bucket resets and `lastTotal` is re-seeded from the current
+ *  total. This survives both UDM reboots and panel-server restarts. */
+type MonthlyEntry = { lastRx: number; lastTx: number; monthRx: number; monthTx: number };
+type MonthlyState = { month: string; wans: Record<string, MonthlyEntry> };
+
+const MONTHLY_PATH = join(process.cwd(), 'data', 'monthly.json');
+const MONTHLY_WRITE_INTERVAL_MS = 30_000;
+
+function currentMonthLabel(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function loadMonthlyState(): MonthlyState {
+  try {
+    const text = readFileSync(MONTHLY_PATH, 'utf8');
+    const parsed = JSON.parse(text) as MonthlyState;
+    if (parsed && typeof parsed.month === 'string' && parsed.wans) return parsed;
+  } catch {
+    // first run, missing file, or corrupt — fall through to fresh state
+  }
+  return { month: currentMonthLabel(), wans: {} };
+}
+
+function saveMonthlyState(state: MonthlyState): void {
+  try {
+    mkdirSync(dirname(MONTHLY_PATH), { recursive: true });
+    writeFileSync(MONTHLY_PATH, JSON.stringify(state));
+  } catch (err) {
+    console.error('[poller] failed to persist monthly state:', err);
+  }
+}
 
 type WanRuntime = {
   id: string;
@@ -164,6 +204,16 @@ export async function startPoller(): Promise<void> {
   // exposes one entry without an ifname tying it to a specific interface.
   const wanIpsByIfName: Record<string, string | null> = {};
 
+  // Monthly counter state: rebuilt from on-disk state at startup so a
+  // panel-server restart doesn't lose month-to-date numbers.
+  const monthly = loadMonthlyState();
+  let monthlyDirty = false;
+  let monthlySavedAt = 0;
+  // Per-WAN gateway details (IPv6, latest WAN IP) refreshed on the
+  // udmInfoMs cadence — lifetime byte counters from the gateway aren't
+  // used for monthly tracking (SNMP is more frequent and authoritative).
+  let lastWanDetails: GatewayWanDetails[] = [];
+
   // === Per-client rate computation (legacy API caches counters at ~30s, so
   //     we poll at 60s and derive rates from byte deltas). ===
   type Prev = { rxBytes: number; txBytes: number; ts: number };
@@ -284,19 +334,60 @@ export async function startPoller(): Promise<void> {
           })
           .catch((e) => console.error('[poller] health error', e)),
       );
+      tasks.push(
+        unifi
+          .getWanDetails()
+          .then((d) => {
+            lastWanDetails = d;
+          })
+          .catch((e) => console.error('[poller] wan details error', e)),
+      );
     }
     await Promise.all(tasks);
 
-    // /stat/health returns a single `wan` entry plus a `www` entry on
-    // this firmware. Per-wan latency isn't broken out, so we attach
-    // the `www` (Internet check) latency to every WAN — it's the most
-    // useful "is the internet healthy" signal we have. status comes
-    // from the wan-named subsystem when available.
+    // Monthly accumulator: roll over on calendar-month change, then add
+    // this tick's SNMP counter delta to monthRx/monthTx. Negative deltas
+    // (counter reset on UDM reboot) are clamped to 0.
+    const monthLabel = currentMonthLabel();
+    if (monthly.month !== monthLabel) {
+      monthly.month = monthLabel;
+      monthly.wans = {};
+      monthlyDirty = true;
+    }
+    if (snmpOk) {
+      for (const w of wans) {
+        const entry = monthly.wans[w.id] ?? { lastRx: 0, lastTx: 0, monthRx: 0, monthTx: 0 };
+        const isFirstSeen = entry.lastRx === 0 && entry.lastTx === 0;
+        if (!isFirstSeen) {
+          const drx = w.rxTotal - entry.lastRx;
+          const dtx = w.txTotal - entry.lastTx;
+          if (drx > 0) entry.monthRx += drx;
+          if (dtx > 0) entry.monthTx += dtx;
+        }
+        entry.lastRx = w.rxTotal;
+        entry.lastTx = w.txTotal;
+        monthly.wans[w.id] = entry;
+        monthlyDirty = true;
+      }
+    }
+    if (monthlyDirty && now - monthlySavedAt >= MONTHLY_WRITE_INTERVAL_MS) {
+      saveMonthlyState(monthly);
+      monthlySavedAt = now;
+      monthlyDirty = false;
+    }
+
+    // /stat/health returns one entry per WAN (`wan`, `wan2`) plus a
+    // `www` aggregate. Per-WAN latency lives in the bucket keyed by
+    // WAN/WAN2 in `uptime_stats` (handled in unifi.ts → toHealthSubsystem).
+    // Status comes from the wan-named subsystem; latency falls back to
+    // the www entry when the wan-bucket isn't populated (fresh uplink).
     const wwwHealth = lastHealth.find((h) => h.name === 'www');
     const wanByOrder = lastHealth.filter((h) => h.name.startsWith('wan'));
+    const detailsByIf = new Map(lastWanDetails.map((d) => [d.ifName, d]));
     const wanOut: Wan[] = wans.map((w, i) => {
-      const ip = wanIpsByIfName[w.ifName] ?? null;
+      const det = detailsByIf.get(w.ifName) ?? null;
       const h = wanByOrder[i] ?? wanByOrder[0] ?? null;
+      const monthEntry = monthly.wans[w.id];
       return {
         id: w.id,
         ifIndex: w.ifIndex,
@@ -307,9 +398,13 @@ export async function startPoller(): Promise<void> {
         txBps: w.txBps,
         rxTotal: w.rxTotal,
         txTotal: w.txTotal,
-        wanIp: ip ?? h?.wanIp ?? null,
+        wanIp: det?.ip ?? wanIpsByIfName[w.ifName] ?? h?.wanIp ?? null,
+        wanIpv6: det?.ipv6 ?? null,
         status: h?.status === 'ok' ? 'ok' : h ? 'down' : 'unknown',
-        latencyMs: wwwHealth?.latencyMs ?? null,
+        latencyMs: h?.latencyMs ?? wwwHealth?.latencyMs ?? null,
+        monthRxBytes: monthEntry?.monthRx ?? 0,
+        monthTxBytes: monthEntry?.monthTx ?? 0,
+        monthLabel: monthly.month,
       };
     });
 

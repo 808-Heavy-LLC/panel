@@ -1,6 +1,7 @@
 <script lang="ts">
   import { panel } from '$lib/store.svelte';
-  import { formatUptime } from '$lib/format';
+  import { formatBytes, formatUptime } from '$lib/format';
+  import type { HealthSubsystem } from '$lib/types';
 
   const www = $derived(panel.health.find((h) => h.name === 'www') ?? null);
   const wanHealths = $derived(panel.health.filter((h) => h.name.startsWith('wan')));
@@ -46,6 +47,34 @@
     if (mbps == null) return '—';
     if (mbps >= 1000) return `${(mbps / 1000).toFixed(2)} Gbps`;
     return `${mbps.toFixed(0)} Mbps`;
+  }
+
+  function fmtMonth(label: string): string {
+    const [y, m] = label.split('-');
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    const idx = Number.parseInt(m ?? '0', 10) - 1;
+    return idx >= 0 && idx < 12 ? `${months[idx]} ${y}` : label;
+  }
+
+  function bytesText(b: number): string {
+    const f = formatBytes(b);
+    return `${f.value} ${f.unit}`;
+  }
+
+  // Pick the icmp probe whose target matches a well-known site. Returns
+  // null when the monitor list is empty (fresh uplink) or no match.
+  function findProbe(monitors: HealthSubsystem['monitors'], match: (t: string) => boolean): number | null {
+    const p = monitors.find((m) => m.type === 'icmp' && match(m.target.toLowerCase()));
+    return p?.latencyMs ?? null;
+  }
+
+  function probesFor(h: HealthSubsystem | null): { ms: number | null; google: number | null; cf: number | null } {
+    if (!h) return { ms: null, google: null, cf: null };
+    return {
+      ms: findProbe(h.monitors, (t) => t.includes('microsoft')),
+      google: findProbe(h.monitors, (t) => t.includes('google')),
+      cf: findProbe(h.monitors, (t) => t === '1.1.1.1' || t.includes('cloudflare')),
+    };
   }
 </script>
 
@@ -97,29 +126,65 @@
     </div>
   </div>
 
-  <!-- Per-WAN status -->
-  <div class="block flex-1 min-h-0 overflow-hidden">
-    <div class="row-head">
-      <span class="label">WAN STATUS</span>
-    </div>
-    <ul class="wan-list">
-      {#each panel.wans as w, i (w.id)}
-        {@const h = wanHealths[i] ?? wanHealths[0] ?? null}
-        <li class="wan-row">
-          <span class="state-dot" class:up={(h?.status ?? w.status) === 'ok'}></span>
-          <span class="wan-name truncate">{w.label}</span>
-          <span class="wan-meta truncate">
-            {w.wanIp ?? h?.wanIp ?? '—'}
+  <!-- Per-WAN cards -->
+  <div class="block flex-1 min-h-0 overflow-y-auto wan-cards">
+    {#each panel.wans as w, i (w.id)}
+      {@const h = wanHealths[i] ?? null}
+      {@const probes = probesFor(h)}
+      {@const isOk = (h?.status ?? w.status) === 'ok'}
+      <div class="wan-card">
+        <div class="wan-head">
+          <span class="state-dot" class:up={isOk}></span>
+          <span class="wan-name">{h?.ispName ?? w.label}</span>
+          {#if h?.asn != null}
+            <span class="wan-asn">AS{h.asn}</span>
+          {/if}
+          {#if h?.availabilityPct != null}
+            <span class="wan-avail">{h.availabilityPct.toFixed(h.availabilityPct === 100 ? 0 : 1)}%</span>
+          {/if}
+        </div>
+
+        <dl class="wan-grid">
+          <dt>IPv4</dt>
+          <dd class="mono">{w.wanIp ?? h?.wanIp ?? '—'}</dd>
+
+          {#if w.wanIpv6}
+            <dt>IPv6</dt>
+            <dd class="mono truncate" title={w.wanIpv6}>{w.wanIpv6}</dd>
+          {/if}
+
+          <dt>Used · {fmtMonth(w.monthLabel)}</dt>
+          <dd>
+            <span class="hud-value-primary">↓ {bytesText(w.monthRxBytes)}</span>
+            <span class="sep"> · </span>
+            <span class="hud-value-secondary">↑ {bytesText(w.monthTxBytes)}</span>
+          </dd>
+
+          {#if h?.uptimeSec}
+            <dt>Uptime</dt>
+            <dd>{formatUptime(h.uptimeSec)}</dd>
+          {/if}
+        </dl>
+
+        <div class="probe-row">
+          <span class="probe" class:dim={probes.ms == null}>
+            <span class="probe-tag">MS</span>
+            <span class="probe-val">{probes.ms ?? '—'}<span class="probe-unit">ms</span></span>
           </span>
-          <span class="wan-up">
-            {h?.uptimeSec ? formatUptime(h.uptimeSec) : '—'}
+          <span class="probe" class:dim={probes.google == null}>
+            <span class="probe-tag">GOOGL</span>
+            <span class="probe-val">{probes.google ?? '—'}<span class="probe-unit">ms</span></span>
           </span>
-        </li>
-      {/each}
-      {#if panel.wans.length === 0}
-        <li class="grid place-items-center py-2 text-[var(--c-text-dim)] text-[11px]">No WANs reporting…</li>
-      {/if}
-    </ul>
+          <span class="probe" class:dim={probes.cf == null}>
+            <span class="probe-tag">CF</span>
+            <span class="probe-val">{probes.cf ?? '—'}<span class="probe-unit">ms</span></span>
+          </span>
+        </div>
+      </div>
+    {/each}
+    {#if panel.wans.length === 0}
+      <div class="grid place-items-center py-2 text-[var(--c-text-dim)] text-[11px]">No WANs reporting…</div>
+    {/if}
   </div>
 </div>
 
@@ -209,36 +274,41 @@
     font-size: 18px;
     line-height: 1;
   }
-  .wan-list {
+
+  .wan-cards {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
+    gap: 8px;
   }
-  .wan-row {
+  .wan-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px 8px;
+    border-left: 2px solid var(--c-line);
+    background: color-mix(in oklab, var(--c-line) 12%, transparent);
+  }
+  .wan-head {
     display: grid;
-    grid-template-columns: 10px 1fr 1.2fr auto;
+    grid-template-columns: 10px 1fr auto auto;
     gap: 8px;
     align-items: baseline;
-    padding: 3px 6px;
-    border-left: 2px solid var(--c-line);
-    font-size: 11px;
   }
   .wan-name {
     color: var(--c-text-bright);
+    font-family: var(--font-display);
+    font-size: 12px;
+    letter-spacing: 0.06em;
   }
-  .wan-meta {
+  .wan-asn {
     font-family: var(--font-mono);
+    font-size: 10px;
     color: var(--c-text-dim);
-    font-size: 10px;
   }
-  .wan-up {
+  .wan-avail {
     font-family: var(--font-mono);
-    color: var(--c-text);
     font-size: 10px;
-    white-space: nowrap;
+    color: var(--c-ok);
   }
   .state-dot {
     width: 8px;
@@ -250,5 +320,73 @@
   .state-dot.up {
     background: var(--c-ok);
     box-shadow: 0 0 calc(6px * var(--glow-mult)) var(--c-ok);
+  }
+  .wan-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 10px;
+    margin: 0;
+    font-size: 10.5px;
+  }
+  .wan-grid dt {
+    color: var(--c-text-dim);
+    font-family: var(--font-display);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 9.5px;
+    align-self: baseline;
+  }
+  .wan-grid dd {
+    margin: 0;
+    color: var(--c-text);
+    min-width: 0;
+  }
+  .mono {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+  }
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sep {
+    color: var(--c-text-dim);
+    margin: 0 4px;
+  }
+  .probe-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 4px;
+  }
+  .probe {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px;
+    align-items: baseline;
+    padding: 2px 6px;
+    border: 1px solid var(--c-line);
+    border-radius: 2px;
+    background: color-mix(in oklab, var(--c-bg) 30%, transparent);
+  }
+  .probe.dim {
+    opacity: 0.4;
+  }
+  .probe-tag {
+    font-family: var(--font-display);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--c-text-dim);
+  }
+  .probe-val {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--c-primary);
+    text-align: right;
+  }
+  .probe-unit {
+    font-size: 9px;
+    color: var(--c-text-dim);
+    margin-left: 2px;
   }
 </style>

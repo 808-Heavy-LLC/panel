@@ -48,11 +48,49 @@ const DPI_APP_FIXTURES = [
   { name: 'GitHub', weight: 3 },
 ];
 
-type WanState = { rxTotal: number; txTotal: number; phaseOffset: number; baseRx: number; baseTx: number; ifName: string; ip: string };
+type WanState = {
+  rxTotal: number;
+  txTotal: number;
+  monthRx: number;
+  monthTx: number;
+  phaseOffset: number;
+  baseRx: number;
+  baseTx: number;
+  ifName: string;
+  ip: string;
+  ipv6: string | null;
+};
 const WANS: WanState[] = [
-  { rxTotal: 1_200_000_000_000, txTotal: 180_000_000_000, phaseOffset: 0, baseRx: 60_000_000, baseTx: 4_000_000, ifName: 'eth9', ip: '203.0.113.42' },
-  { rxTotal: 600_000_000_000, txTotal: 80_000_000_000, phaseOffset: 3.7, baseRx: 28_000_000, baseTx: 2_000_000, ifName: 'eth10', ip: '198.51.100.7' },
+  {
+    rxTotal: 1_200_000_000_000,
+    txTotal: 180_000_000_000,
+    monthRx: 1_420_000_000_000,
+    monthTx: 95_000_000_000,
+    phaseOffset: 0,
+    baseRx: 60_000_000,
+    baseTx: 4_000_000,
+    ifName: 'eth9',
+    ip: '203.0.113.42',
+    ipv6: '2600:1700:5451:1cf0::1/64',
+  },
+  {
+    rxTotal: 600_000_000_000,
+    txTotal: 80_000_000_000,
+    monthRx: 280_000_000_000,
+    monthTx: 18_000_000_000,
+    phaseOffset: 3.7,
+    baseRx: 28_000_000,
+    baseTx: 2_000_000,
+    ifName: 'eth10',
+    ip: '198.51.100.7',
+    ipv6: null,
+  },
 ];
+
+function currentMonthLabel(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 let phase = 0;
 
 function noise(amp: number): number {
@@ -71,6 +109,8 @@ export function mockWans(intervalMs = 2000): Wan[] {
     const tx = Math.max(0, w.baseTx * env + noise(w.baseTx * 0.25));
     w.rxTotal += (rx * intervalMs) / 1000;
     w.txTotal += (tx * intervalMs) / 1000;
+    w.monthRx += (rx * intervalMs) / 1000;
+    w.monthTx += (tx * intervalMs) / 1000;
     return {
       id: `wan${i + 1}`,
       ifIndex: i + 3,
@@ -82,16 +122,38 @@ export function mockWans(intervalMs = 2000): Wan[] {
       rxTotal: w.rxTotal,
       txTotal: w.txTotal,
       wanIp: w.ip,
+      wanIpv6: w.ipv6,
       status: 'ok',
       latencyMs: 6 + Math.random() * 6 + i * 4,
+      monthRxBytes: w.monthRx,
+      monthTxBytes: w.monthTx,
+      monthLabel: currentMonthLabel(),
     };
   });
+}
+
+const ISP_FIXTURES = [
+  { name: 'AT&T Internet', org: 'AT&T Enterprises, LLC', asn: 7018 },
+  { name: 'Xfinity / Comcast', org: 'Comcast Cable Communications, LLC', asn: 7922 },
+];
+
+function mockMonitors(latencyBase: number): HealthSubsystem['monitors'] {
+  return [
+    { target: 'www.microsoft.com', type: 'icmp', latencyMs: Math.max(1, Math.round(latencyBase + 5 + noise(2))), availabilityPct: 100 },
+    { target: 'google.com', type: 'icmp', latencyMs: Math.max(1, Math.round(latencyBase * 4 + noise(5))), availabilityPct: 100 },
+    { target: '1.1.1.1', type: 'icmp', latencyMs: Math.max(1, Math.round(latencyBase + noise(1))), availabilityPct: 100 },
+    { target: '1.1.1.1', type: 'dns', latencyMs: Math.max(1, Math.round(latencyBase + 1 + noise(1))), availabilityPct: 100 },
+    { target: '8.8.8.8', type: 'dns', latencyMs: Math.max(1, Math.round(latencyBase * 6 + noise(3))), availabilityPct: 100 },
+    { target: 'ping.ui.com', type: 'icmp', latencyMs: Math.max(1, Math.round(latencyBase + noise(1))), availabilityPct: 100 },
+  ];
 }
 
 export function mockHealth(wans: Wan[]): HealthSubsystem[] {
   const out: HealthSubsystem[] = [];
   for (let i = 0; i < wans.length; i++) {
     const w = wans[i]!;
+    const isp = ISP_FIXTURES[i] ?? null;
+    const latencyBase = (w.latencyMs ?? 8) / 1.4;
     out.push({
       name: i === 0 ? 'wan' : `wan${i + 1}`,
       status: 'ok',
@@ -105,11 +167,34 @@ export function mockHealth(wans: Wan[]): HealthSubsystem[] {
       numUser: null,
       numGuest: null,
       wanIp: w.wanIp,
+      availabilityPct: 99.5 + Math.random() * 0.5,
+      monitors: mockMonitors(latencyBase),
+      ispName: isp?.name ?? null,
+      ispOrg: isp?.org ?? null,
+      asn: isp?.asn ?? null,
     });
   }
-  out.push({
-    name: 'www',
+  const baseHealth: Omit<HealthSubsystem, 'name'> = {
     status: 'ok',
+    latencyMs: null,
+    drops: null,
+    uptimeSec: null,
+    xputDownMbps: null,
+    xputUpMbps: null,
+    speedtestLastRunTs: null,
+    speedtestStatus: null,
+    numUser: null,
+    numGuest: null,
+    wanIp: null,
+    availabilityPct: null,
+    monitors: [],
+    ispName: null,
+    ispOrg: null,
+    asn: null,
+  };
+  out.push({
+    ...baseHealth,
+    name: 'www',
     latencyMs: 8 + noise(2),
     drops: 0,
     uptimeSec: 1_500_000,
@@ -117,52 +202,10 @@ export function mockHealth(wans: Wan[]): HealthSubsystem[] {
     xputUpMbps: 880 + noise(20),
     speedtestLastRunTs: Math.floor(Date.now() / 1000) - 6 * 3600,
     speedtestStatus: 'Idle',
-    numUser: null,
-    numGuest: null,
-    wanIp: null,
   });
-  out.push({
-    name: 'lan',
-    status: 'ok',
-    latencyMs: null,
-    drops: null,
-    uptimeSec: null,
-    xputDownMbps: null,
-    xputUpMbps: null,
-    speedtestLastRunTs: null,
-    speedtestStatus: null,
-    numUser: 32,
-    numGuest: 0,
-    wanIp: null,
-  });
-  out.push({
-    name: 'wlan',
-    status: 'ok',
-    latencyMs: null,
-    drops: null,
-    uptimeSec: null,
-    xputDownMbps: null,
-    xputUpMbps: null,
-    speedtestLastRunTs: null,
-    speedtestStatus: null,
-    numUser: 47,
-    numGuest: 3,
-    wanIp: null,
-  });
-  out.push({
-    name: 'vpn',
-    status: 'ok',
-    latencyMs: null,
-    drops: null,
-    uptimeSec: null,
-    xputDownMbps: null,
-    xputUpMbps: null,
-    speedtestLastRunTs: null,
-    speedtestStatus: null,
-    numUser: 1,
-    numGuest: null,
-    wanIp: null,
-  });
+  out.push({ ...baseHealth, name: 'lan', numUser: 32, numGuest: 0 });
+  out.push({ ...baseHealth, name: 'wlan', numUser: 47, numGuest: 3 });
+  out.push({ ...baseHealth, name: 'vpn', numUser: 1 });
   return out;
 }
 

@@ -26,6 +26,20 @@ type RawHealth = {
   xput_down?: number;
 };
 
+type RawHealthMonitor = {
+  target?: string;
+  type?: string;
+  latency_average?: number;
+  availability?: number;
+};
+
+type RawHealthUptimeBucket = {
+  latency_average?: number;
+  availability?: number;
+  monitors?: RawHealthMonitor[];
+  alerting_monitors?: RawHealthMonitor[];
+};
+
 type RawHealthSubsystem = {
   subsystem?: string;
   status?: string;
@@ -39,18 +53,44 @@ type RawHealthSubsystem = {
   speedtest_status?: string;
   // wan-only
   wan_ip?: string;
+  isp_name?: string;
+  isp_organization?: string;
+  asn?: number;
+  uptime_stats?: Record<string, RawHealthUptimeBucket>;
   // lan/wlan
   num_user?: number;
   num_guest?: number;
 };
 
+function toProbe(m: RawHealthMonitor): HealthSubsystem['monitors'][number] {
+  return {
+    target: m.target ?? '',
+    type: m.type ?? 'unknown',
+    latencyMs: typeof m.latency_average === 'number' ? m.latency_average : null,
+    availabilityPct: typeof m.availability === 'number' ? m.availability : null,
+  };
+}
+
 function toHealthSubsystem(h: RawHealthSubsystem): HealthSubsystem {
   const status: HealthSubsystem['status'] =
     h.status === 'ok' ? 'ok' : h.status === 'warning' ? 'warning' : 'unknown';
+  // The wan/wan2 entries don't carry a top-level `latency`; instead the
+  // current avg lives in `uptime_stats.{WAN,WAN2}.latency_average`. Pick
+  // the bucket whose key matches this subsystem (case-insensitive).
+  const bucket = (() => {
+    const stats = h.uptime_stats;
+    if (!stats) return null;
+    const want = (h.subsystem ?? '').toUpperCase();
+    return stats[want] ?? Object.values(stats)[0] ?? null;
+  })();
+  const monitors = [...(bucket?.alerting_monitors ?? []), ...(bucket?.monitors ?? [])].map(toProbe);
+  const latencyFromBucket =
+    typeof bucket?.latency_average === 'number' ? bucket.latency_average : null;
   return {
     name: h.subsystem ?? 'unknown',
     status,
-    latencyMs: typeof h.latency === 'number' ? h.latency : null,
+    latencyMs:
+      typeof h.latency === 'number' ? h.latency : latencyFromBucket,
     drops: typeof h.drops === 'number' ? h.drops : null,
     uptimeSec: typeof h.uptime === 'number' ? h.uptime : null,
     xputDownMbps: typeof h.xput_down === 'number' ? h.xput_down : null,
@@ -60,6 +100,12 @@ function toHealthSubsystem(h: RawHealthSubsystem): HealthSubsystem {
     numUser: typeof h.num_user === 'number' ? h.num_user : null,
     numGuest: typeof h.num_guest === 'number' ? h.num_guest : null,
     wanIp: h.wan_ip ?? null,
+    availabilityPct:
+      typeof bucket?.availability === 'number' ? bucket.availability : null,
+    monitors,
+    ispName: h.isp_name ?? null,
+    ispOrg: h.isp_organization ?? null,
+    asn: typeof h.asn === 'number' ? h.asn : null,
   };
 }
 
@@ -101,6 +147,26 @@ type RawTrafficResponse = {
   client_usage_by_app?: RawTrafficApp[];
 };
 
+type RawGatewayWan = {
+  ifname?: string;
+  uplink_ifname?: string;
+  name?: string;
+  ip?: string;
+  ipv6?: string[];
+  mac?: string;
+  netmask?: string;
+  enable?: boolean;
+  up?: boolean;
+  is_uplink?: boolean;
+  speed?: number;
+  max_speed?: number;
+  media?: string;
+  rx_bytes?: number;
+  tx_bytes?: number;
+  latency?: number;
+  availability?: number;
+};
+
 type RawDevice = {
   _id?: string;
   name?: string;
@@ -112,6 +178,26 @@ type RawDevice = {
   uptime?: number;
   'system-stats'?: { cpu?: string; mem?: string; uptime?: string };
   temperatures?: Array<{ value?: number; name?: string; type?: string }>;
+  /** UDM gateway WAN ports — keys are `wan1` and `wan2`. */
+  wan1?: RawGatewayWan;
+  wan2?: RawGatewayWan;
+  /** Top-level IPv6 addresses bound to the gateway (global + link-local). */
+  ipv6?: string[];
+};
+
+/** Per-WAN details extracted from the gateway device entry. Keyed by the
+ *  uplink interface name (`eth9`, `eth10`, …) so the poller can match it
+ *  against the SNMP-derived WAN list. */
+export type GatewayWanDetails = {
+  ifName: string;
+  ip: string | null;
+  ipv6: string | null;
+  mac: string | null;
+  rxBytes: number;
+  txBytes: number;
+  latencyMs: number | null;
+  availabilityPct: number | null;
+  up: boolean;
 };
 
 type RawV2Device = RawDevice & {
@@ -572,6 +658,44 @@ export class UnifiClient {
       `/api/s/${this.opts.site}/stat/health`,
     );
     return (r.data ?? []).map(toHealthSubsystem);
+  }
+
+  /** Per-WAN details from the gateway device entry. Keyed by uplink
+   *  ifname (`eth9`, `eth10`, …). Returns `[]` outside legacy mode or
+   *  when no gateway is reported. */
+  async getWanDetails(): Promise<GatewayWanDetails[]> {
+    if (this.mode !== 'legacy') return [];
+    const r = await this.legacyGet<{ data: RawDevice[] }>(`/api/s/${this.opts.site}/stat/device`);
+    const gw = (r.data ?? []).find(
+      (d) =>
+        d.is_gateway === true ||
+        d.type === 'ugw' ||
+        (d.model ?? '').startsWith('UDM') ||
+        (d.model ?? '').startsWith('UGW'),
+    );
+    if (!gw) return [];
+    const ipv6Global = (gw.ipv6 ?? []).find((a) => !a.startsWith('fe80')) ?? null;
+    const out: GatewayWanDetails[] = [];
+    for (const w of [gw.wan1, gw.wan2]) {
+      if (!w) continue;
+      const ifName = w.uplink_ifname ?? w.ifname ?? w.name ?? '';
+      if (!ifName) continue;
+      out.push({
+        ifName,
+        ip: w.ip ?? null,
+        // gw.wan1.ipv6 is link-local only; the global prefix lives on the
+        // gateway-level `ipv6` field, which we share across WANs since
+        // the UDM doesn't break out per-WAN globals here.
+        ipv6: ipv6Global,
+        mac: w.mac ?? null,
+        rxBytes: typeof w.rx_bytes === 'number' ? w.rx_bytes : 0,
+        txBytes: typeof w.tx_bytes === 'number' ? w.tx_bytes : 0,
+        latencyMs: typeof w.latency === 'number' ? w.latency : null,
+        availabilityPct: typeof w.availability === 'number' ? w.availability : null,
+        up: w.up === true,
+      });
+    }
+    return out;
   }
 
   async getUdmInfo(): Promise<UdmInfo | null> {

@@ -9,8 +9,12 @@ export type Wan = {
   rxTotal: number;
   txTotal: number;
   wanIp: string | null;
+  wanIpv6: string | null;
   status: 'ok' | 'down' | 'unknown';
   latencyMs: number | null;
+  monthRxBytes: number;
+  monthTxBytes: number;
+  monthLabel: string;
 };
 
 export type WanSample = {
@@ -18,6 +22,13 @@ export type WanSample = {
   rxBps: number;
   txBps: number;
   latencyMs: number | null;
+};
+
+export type HealthProbe = {
+  target: string;
+  type: string;
+  latencyMs: number | null;
+  availabilityPct: number | null;
 };
 
 export type HealthSubsystem = {
@@ -33,6 +44,11 @@ export type HealthSubsystem = {
   numUser: number | null;
   numGuest: number | null;
   wanIp: string | null;
+  availabilityPct: number | null;
+  monitors: HealthProbe[];
+  ispName: string | null;
+  ispOrg: string | null;
+  asn: number | null;
 };
 
 export type ClientStat = {

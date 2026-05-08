@@ -9,8 +9,16 @@ export type Wan = {
   rxTotal: number;
   txTotal: number;
   wanIp: string | null;
+  /** First global IPv6 address advertised on the WAN, when present. */
+  wanIpv6: string | null;
   status: 'ok' | 'down' | 'unknown';
   latencyMs: number | null;
+  /** Month-to-date rx/tx, accumulated from SNMP deltas and persisted to
+   *  disk. Resets at the start of each calendar month (local time). */
+  monthRxBytes: number;
+  monthTxBytes: number;
+  /** YYYY-MM label that monthRxBytes/monthTxBytes apply to. */
+  monthLabel: string;
 };
 
 export type WanSample = {
@@ -26,6 +34,17 @@ export type WanSample = {
  *  UniFi keys subsystems by name: `wan`, `wan2`, `www`, `lan`, `wlan`,
  *  `vpn`. Different subsystems carry different fields, so most numeric
  *  fields are nullable. */
+export type HealthProbe = {
+  /** Hostname or IP being probed (e.g. `www.microsoft.com`, `1.1.1.1`). */
+  target: string;
+  /** Probe type as reported by UniFi (`icmp`, `dns`, …). */
+  type: string;
+  /** Average latency in ms over the controller's monitoring window. */
+  latencyMs: number | null;
+  /** Probe success rate as a percent (0–100). */
+  availabilityPct: number | null;
+};
+
 export type HealthSubsystem = {
   name: string;
   status: 'ok' | 'warning' | 'unknown';
@@ -47,6 +66,13 @@ export type HealthSubsystem = {
   numGuest: number | null;
   /** Public IP for this WAN (wan only). */
   wanIp: string | null;
+  /** Per-WAN monitoring (wan/wan2 only). The controller samples a few
+   *  upstream targets and reports rolling latency/availability. */
+  availabilityPct: number | null;
+  monitors: HealthProbe[];
+  ispName: string | null;
+  ispOrg: string | null;
+  asn: number | null;
 };
 
 export type ClientStat = {
