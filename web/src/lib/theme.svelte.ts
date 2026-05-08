@@ -1,18 +1,22 @@
-export const THEMES = ['hud'] as const;
+export const THEMES = ['xbox', 'hud'] as const;
 export type ThemeName = (typeof THEMES)[number];
 
 export const THEME_LABELS: Record<ThemeName, string> = {
+  xbox: 'XBOX',
   hud: 'HUD',
 };
 
-const STORAGE_KEY = 'panel.theme';
+// Bumped from 'panel.theme' so the new xbox default takes effect on
+// kiosks that already have a stored preference from the prior theme.
+const STORAGE_KEY = 'panel.theme.v2';
+const DEFAULT_THEME: ThemeName = 'xbox';
 
 function isTheme(v: string | null | undefined): v is ThemeName {
   return !!v && (THEMES as readonly string[]).includes(v);
 }
 
 function readInitial(): ThemeName {
-  if (typeof window === 'undefined') return 'hud';
+  if (typeof window === 'undefined') return DEFAULT_THEME;
   const url = new URL(window.location.href);
   const fromUrl = url.searchParams.get('theme');
   if (isTheme(fromUrl)) return fromUrl;
@@ -22,11 +26,11 @@ function readInitial(): ThemeName {
   } catch {
     // localStorage may not be available
   }
-  return 'hud';
+  return DEFAULT_THEME;
 }
 
 class ThemeStore {
-  current = $state<ThemeName>('hud');
+  current = $state<ThemeName>(DEFAULT_THEME);
   changedAt = $state(0);
 
   init(): () => void {
