@@ -218,6 +218,18 @@
   }
 }
 
+/* Let the Xbox bg animation show through panels and tiles. The default
+   HUD theme keeps its solid panels for legibility; Xbox trades some
+   contrast for the visible animated background. */
+[data-theme='xbox'] .hud-frame {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--c-bg-panel) 65%, transparent),
+    color-mix(in oklab, var(--c-bg-panel-2) 65%, transparent)
+  );
+  backdrop-filter: blur(2px);
+}
+
 /* ============================================================
    Global resets + body chrome
    ============================================================ */
