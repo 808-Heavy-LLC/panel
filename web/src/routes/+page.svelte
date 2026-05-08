@@ -195,7 +195,7 @@
           <HudFrame label="SWITCH DETAIL" accent="primary">
             {#snippet actions()}
               {@const sws = panel.devices.filter((d) => d.type === 'usw').length}
-              {@const groups = Math.max(1, Math.ceil(sws / 6))}
+              {@const groups = Math.max(1, Math.ceil(sws / 8))}
               <span>{sws} SWITCHES · {groups > 1 ? `${groups} GROUPS · 12s` : 'SINGLE PAGE'}</span>
             {/snippet}
             {#snippet children()}

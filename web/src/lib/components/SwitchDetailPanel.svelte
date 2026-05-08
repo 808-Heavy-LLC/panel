@@ -3,7 +3,7 @@
   import { panel } from '$lib/store.svelte';
   import { formatBps, formatUptime } from '$lib/format';
 
-  const PAGE_SIZE = 6;
+  const PAGE_SIZE = 8;
   const GROUP_DWELL_MS = 12_000;
 
   // Stable order so the cycle doesn't reshuffle when bandwidth changes.
@@ -92,7 +92,7 @@
 <style>
   .sw-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     grid-auto-rows: minmax(0, 1fr);
     gap: 6px;
     height: 100%;
