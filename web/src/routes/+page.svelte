@@ -14,9 +14,11 @@
   import SwitchesPanel from '$lib/components/SwitchesPanel.svelte';
   import RadiosPanel from '$lib/components/RadiosPanel.svelte';
   import TopologyPanel from '$lib/components/TopologyPanel.svelte';
+  import InternetHealthPanel from '$lib/components/InternetHealthPanel.svelte';
+  import TopTalkersTotalPanel from '$lib/components/TopTalkersTotalPanel.svelte';
   import '../app.css';
 
-  const PAGE_COUNT = 3;
+  const PAGE_COUNT = 4;
   const AUTO_CYCLE_MS = 30_000;
   let currentPage = $state(0);
 
@@ -143,6 +145,33 @@
               {/snippet}
             </HudFrame>
           </div>
+        </main>
+      </section>
+
+      <!-- ============= PAGE 4: Internet Health + Top Talkers ============= -->
+      <section class="page" class:active={currentPage === 3}>
+        <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 1fr 1fr; grid-template-rows: 1fr;">
+          <HudFrame label="INTERNET HEALTH" accent="primary">
+            {#snippet actions()}
+              {@const www = panel.health.find((h) => h.name === 'www')}
+              <span>
+                {www?.status ? www.status.toUpperCase() : '—'}
+                {#if www?.latencyMs != null} · {www.latencyMs}ms{/if}
+              </span>
+            {/snippet}
+            {#snippet children()}
+              <InternetHealthPanel />
+            {/snippet}
+          </HudFrame>
+
+          <HudFrame label="TOP TALKERS · SESSION" accent="primary">
+            {#snippet actions()}
+              <span>{panel.clients.length} CLIENTS</span>
+            {/snippet}
+            {#snippet children()}
+              <TopTalkersTotalPanel />
+            {/snippet}
+          </HudFrame>
         </main>
       </section>
 

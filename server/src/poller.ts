@@ -287,21 +287,16 @@ export async function startPoller(): Promise<void> {
     }
     await Promise.all(tasks);
 
-    // The legacy /stat/health endpoint exposes one wan entry per WAN
-    // with `latency` and `wan_ip`. Map those onto our WANs by ifName
-    // when possible (UniFi keys these as `wan` and `wan2`, and the
-    // `wan_ip` matches the public IP each one is using).
-    const wanHealthByIp = new Map<string, HealthSubsystem>();
-    for (const h of lastHealth) {
-      if (h.wanIp) wanHealthByIp.set(h.wanIp, h);
-    }
+    // /stat/health returns a single `wan` entry plus a `www` entry on
+    // this firmware. Per-wan latency isn't broken out, so we attach
+    // the `www` (Internet check) latency to every WAN — it's the most
+    // useful "is the internet healthy" signal we have. status comes
+    // from the wan-named subsystem when available.
+    const wwwHealth = lastHealth.find((h) => h.name === 'www');
+    const wanByOrder = lastHealth.filter((h) => h.name.startsWith('wan'));
     const wanOut: Wan[] = wans.map((w, i) => {
       const ip = wanIpsByIfName[w.ifName] ?? null;
-      // Best-effort match: prefer ip-keyed lookup, fall back to the
-      // i-th wan-named subsystem in the order UniFi reported them.
-      const hByIp = ip ? wanHealthByIp.get(ip) : undefined;
-      const hByOrder = lastHealth.filter((h) => h.name.startsWith('wan'))[i];
-      const h = hByIp ?? hByOrder ?? null;
+      const h = wanByOrder[i] ?? wanByOrder[0] ?? null;
       return {
         id: w.id,
         ifIndex: w.ifIndex,
@@ -314,7 +309,7 @@ export async function startPoller(): Promise<void> {
         txTotal: w.txTotal,
         wanIp: ip ?? h?.wanIp ?? null,
         status: h?.status === 'ok' ? 'ok' : h ? 'down' : 'unknown',
-        latencyMs: h?.latencyMs ?? null,
+        latencyMs: wwwHealth?.latencyMs ?? null,
       };
     });
 
