@@ -526,48 +526,41 @@ export class UnifiClient {
     return { apps, categories };
   }
 
-  // One-shot debug: print the raw port_table for the first switch we
-  // see, so we can confirm which PoE-related fields the firmware exposes.
-  // Remove once we've captured enough.
-  private debuggedPoe = false;
-
   async getDevices(): Promise<NetworkDevice[]> {
     if (this.mode !== 'legacy') return [];
-    const r = await this.legacyGet<{ network_devices?: RawV2Device[] }>(
-      `/v2/api/site/${this.opts.site}/device?separateUnmanaged=true&includeTrafficUsage=true`,
-    );
-    if (!this.debuggedPoe) {
-      this.debuggedPoe = true;
-      try {
-        const legacy = await this.legacyGet<{
-          data?: Array<{ name?: string; type?: string; mac?: string; port_table?: Array<Record<string, unknown>> }>;
-        }>(`/api/s/${this.opts.site}/stat/device`);
-        let totalActive = 0;
-        let totalWatts = 0;
-        for (const d of legacy.data ?? []) {
-          if (d.type !== 'usw') continue;
-          for (const p of d.port_table ?? []) {
-            const w = Number.parseFloat(String(p['poe_power'] ?? '0'));
-            if (Number.isFinite(w) && w > 0) {
-              totalActive++;
-              totalWatts += w;
-              if (totalActive <= 4) {
-                console.log(
-                  `[unifi] PoE active — sw=${d.name} port=${p['name']} ` +
-                    `poe_power=${p['poe_power']} poe_enable=${p['poe_enable']} ` +
-                    `port_poe=${p['port_poe']} poe_mode=${p['poe_mode']} ` +
-                    `poe_voltage=${p['poe_voltage']} poe_current=${p['poe_current']}`,
-                );
-              }
-            }
-          }
+    // The v2 device endpoint doesn't include poe_power on this firmware
+    // — the per-port wattage only lives on the legacy stat/device. Fetch
+    // both in parallel and merge the wattages by (device mac, port idx).
+    const [v2, legacy] = await Promise.all([
+      this.legacyGet<{ network_devices?: RawV2Device[] }>(
+        `/v2/api/site/${this.opts.site}/device?separateUnmanaged=true&includeTrafficUsage=true`,
+      ),
+      this.legacyGet<{
+        data?: Array<{
+          mac?: string;
+          port_table?: Array<{ port_idx?: number; poe_power?: string }>;
+        }>;
+      }>(`/api/s/${this.opts.site}/stat/device`).catch((e) => {
+        console.error('[unifi] PoE map fetch failed:', e);
+        return { data: [] as never[] };
+      }),
+    ]);
+    const poeByMac = new Map<string, Map<number, number>>();
+    for (const d of legacy.data ?? []) {
+      const mac = (d.mac ?? '').toLowerCase();
+      if (!mac) continue;
+      const ports = new Map<number, number>();
+      for (const p of d.port_table ?? []) {
+        const w = Number.parseFloat(String(p.poe_power ?? '0'));
+        if (Number.isFinite(w) && w > 0 && p.port_idx != null) {
+          ports.set(p.port_idx, w);
         }
-        console.log(`[unifi] PoE summary — active ports=${totalActive} total=${totalWatts.toFixed(1)}W (legacy /stat/device)`);
-      } catch (e) {
-        console.error('[unifi] PoE debug legacy fetch failed:', e);
       }
+      if (ports.size > 0) poeByMac.set(mac, ports);
     }
-    return (r.network_devices ?? []).map(toDevice);
+    return (v2.network_devices ?? []).map((d) =>
+      toDevice(d, poeByMac.get((d.mac ?? '').toLowerCase()) ?? new Map()),
+    );
   }
 
   /** Health subsystems from `/api/s/{site}/stat/health`. UniFi returns
@@ -661,15 +654,17 @@ function neighborFromPort(
 function toPort(
   p: NonNullable<RawV2Device['port_table']>[number],
   deviceLldp: Map<number, PortNeighbor>,
+  poeByIdx: Map<number, number>,
 ): NetworkPort {
-  // PoE: trust whatever we can parse from poe_power. The poe_enable
-  // field is unreliable across UniFi firmwares (often missing or false
-  // on ports that are actively delivering power), so just gate on the
-  // power reading itself.
-  const poeRaw = p.poe_power ?? '';
-  const parsedPoe = poeRaw ? Number.parseFloat(poeRaw) : 0;
-  const poeWatts = Number.isFinite(parsedPoe) && parsedPoe > 0 ? parsedPoe : 0;
   const idx = p.port_idx ?? 0;
+  // The v2 device endpoint we walk for ports doesn't carry poe_power
+  // on this firmware. We supplement from the legacy /stat/device call
+  // (merged in getDevices), keyed by port index. Fall back to whatever
+  // poe_power happens to be in the v2 payload, in case a future
+  // firmware does include it.
+  const v2Poe = Number.parseFloat(p.poe_power ?? '0');
+  const v2PoeWatts = Number.isFinite(v2Poe) && v2Poe > 0 ? v2Poe : 0;
+  const poeWatts = poeByIdx.get(idx) ?? v2PoeWatts;
   const neighbor = neighborFromPort(p) ?? deviceLldp.get(idx) ?? null;
   return {
     idx,
@@ -698,7 +693,7 @@ function toRadio(r: NonNullable<RawV2Device['radio_table_stats']>[number]): Netw
   };
 }
 
-function toDevice(d: RawV2Device): NetworkDevice {
+function toDevice(d: RawV2Device, poeByIdx: Map<number, number>): NetworkDevice {
   const stats = d['system-stats'];
   const type = (['uap', 'usw', 'udm', 'uci'] as const).includes(d.type as never)
     ? (d.type as NetworkDevice['type'])
@@ -715,7 +710,7 @@ function toDevice(d: RawV2Device): NetworkDevice {
       });
     }
   }
-  const ports = (d.port_table ?? []).map((p) => toPort(p, deviceLldp));
+  const ports = (d.port_table ?? []).map((p) => toPort(p, deviceLldp, poeByIdx));
   const uplinkMac = normalizeMac(d.uplink?.uplink_mac);
   const uplink: PortNeighbor | null = uplinkMac
     ? {
