@@ -650,14 +650,45 @@ export class UnifiClient {
   }
 
   /** Health subsystems from `/api/s/{site}/stat/health`. UniFi returns
-   *  an array of entries keyed by `subsystem`. We pass through the
-   *  fields useful for the dashboard and skip the rest. */
+   *  an array of entries keyed by `subsystem`. The `wan` subsystem
+   *  carries multi-WAN data inside `uptime_stats` (keys `WAN`, `WAN2`,
+   *  …) — we fan it out into per-WAN HealthSubsystem entries so the
+   *  rest of the app can address `wan` and `wan2` symmetrically. The
+   *  top-level `wan_ip` / `isp_name` / `asn` describe the primary WAN
+   *  only and are only attached to the first emitted entry. */
   async getHealth(): Promise<HealthSubsystem[]> {
     if (this.mode !== 'legacy') return [];
     const r = await this.legacyGet<{ data?: RawHealthSubsystem[] }>(
       `/api/s/${this.opts.site}/stat/health`,
     );
-    return (r.data ?? []).map(toHealthSubsystem);
+    const out: HealthSubsystem[] = [];
+    for (const raw of r.data ?? []) {
+      const stats = raw.uptime_stats;
+      if (raw.subsystem === 'wan' && stats && Object.keys(stats).length > 0) {
+        const keys = Object.keys(stats).sort(); // WAN < WAN2 < WAN3 …
+        keys.forEach((key, i) => {
+          const isPrimary = i === 0;
+          out.push(
+            toHealthSubsystem({
+              ...raw,
+              subsystem: key.toLowerCase(),
+              uptime_stats: { [key]: stats[key]! },
+              ...(isPrimary
+                ? {}
+                : {
+                    wan_ip: undefined,
+                    isp_name: undefined,
+                    isp_organization: undefined,
+                    asn: undefined,
+                  }),
+            }),
+          );
+        });
+      } else {
+        out.push(toHealthSubsystem(raw));
+      }
+    }
+    return out;
   }
 
   /** Per-WAN details from the gateway device entry. Keyed by uplink
