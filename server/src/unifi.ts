@@ -5,6 +5,7 @@ import type {
   NetworkDevice,
   NetworkPort,
   NetworkRadio,
+  PortNeighbor,
   UdmInfo,
 } from './types.js';
 
@@ -99,7 +100,32 @@ type RawV2Device = RawDevice & {
     'rx_bytes-r'?: number;
     'tx_bytes-r'?: number;
     poe_power?: string;
+    // LLDP. UniFi has used both flat fields and a nested table across
+    // firmware versions; we read whichever is present.
+    lldp_chassis_id?: string;
+    lldp_port_id?: string;
+    lldp_system_name?: string;
+    lldp_table?: Array<{
+      chassis_id?: string;
+      port_id?: string;
+      system_name?: string;
+    }>;
   }>;
+  // Device-level LLDP table (some firmwares put it here keyed by local
+  // port index instead of inline in port_table).
+  lldp_table?: Array<{
+    local_port_idx?: number;
+    chassis_id?: string;
+    port_id?: string;
+    system_name?: string;
+  }>;
+  // APs report their upstream switch here rather than via per-port LLDP.
+  uplink?: {
+    uplink_mac?: string;
+    uplink_remote_port?: number | string;
+    uplink_device_name?: string;
+    type?: string;
+  };
   radio_table_stats?: Array<{
     name?: string;
     radio?: string;
@@ -518,17 +544,52 @@ function bandFromRadio(name: string | undefined, channel: number): '2g' | '5g' |
   return '6g';
 }
 
-function toPort(p: NonNullable<RawV2Device['port_table']>[number]): NetworkPort {
+function normalizeMac(s: string | undefined | null): string {
+  return (s ?? '').trim().toLowerCase();
+}
+
+function neighborFromPort(
+  p: NonNullable<RawV2Device['port_table']>[number],
+): PortNeighbor | null {
+  const flatChassis = normalizeMac(p.lldp_chassis_id);
+  if (flatChassis) {
+    return {
+      chassisId: flatChassis,
+      portId: p.lldp_port_id ?? null,
+      systemName: p.lldp_system_name ?? null,
+    };
+  }
+  const nested = p.lldp_table?.[0];
+  if (nested) {
+    const chassis = normalizeMac(nested.chassis_id);
+    if (chassis) {
+      return {
+        chassisId: chassis,
+        portId: nested.port_id ?? null,
+        systemName: nested.system_name ?? null,
+      };
+    }
+  }
+  return null;
+}
+
+function toPort(
+  p: NonNullable<RawV2Device['port_table']>[number],
+  deviceLldp: Map<number, PortNeighbor>,
+): NetworkPort {
   const poeWatts = p.poe_enable && p.poe_power ? Number.parseFloat(p.poe_power) : 0;
+  const idx = p.port_idx ?? 0;
+  const neighbor = neighborFromPort(p) ?? deviceLldp.get(idx) ?? null;
   return {
-    idx: p.port_idx ?? 0,
-    name: p.name ?? `Port ${p.port_idx ?? 0}`,
+    idx,
+    name: p.name ?? `Port ${idx}`,
     up: p.up === true,
     speedMbps: p.speed ?? 0,
     isUplink: p.is_uplink === true,
     poeWatts: Number.isFinite(poeWatts) ? poeWatts : 0,
     rxBps: p['rx_bytes-r'] ?? 0,
     txBps: p['tx_bytes-r'] ?? 0,
+    neighbor,
   };
 }
 
@@ -551,7 +612,30 @@ function toDevice(d: RawV2Device): NetworkDevice {
   const type = (['uap', 'usw', 'udm', 'uci'] as const).includes(d.type as never)
     ? (d.type as NetworkDevice['type'])
     : 'other';
-  const ports = (d.port_table ?? []).map(toPort);
+  const deviceLldp = new Map<number, PortNeighbor>();
+  for (const e of d.lldp_table ?? []) {
+    const idx = e.local_port_idx;
+    const chassis = normalizeMac(e.chassis_id);
+    if (typeof idx === 'number' && chassis) {
+      deviceLldp.set(idx, {
+        chassisId: chassis,
+        portId: e.port_id ?? null,
+        systemName: e.system_name ?? null,
+      });
+    }
+  }
+  const ports = (d.port_table ?? []).map((p) => toPort(p, deviceLldp));
+  const uplinkMac = normalizeMac(d.uplink?.uplink_mac);
+  const uplink: PortNeighbor | null = uplinkMac
+    ? {
+        chassisId: uplinkMac,
+        portId:
+          d.uplink?.uplink_remote_port != null
+            ? String(d.uplink.uplink_remote_port)
+            : null,
+        systemName: d.uplink?.uplink_device_name ?? null,
+      }
+    : null;
   // Switches report bytes-r=0 and rx/tx_bytes=0 at the device level; the
   // real numbers live on each port. Sum across ports when the device
   // total is empty. (Sum double-counts each frame — counted on both the
@@ -582,6 +666,7 @@ function toDevice(d: RawV2Device): NetworkDevice {
     tempC: d.general_temperature ?? null,
     ports,
     radios: (d.radio_table_stats ?? []).map(toRadio),
+    uplink,
   };
 }
 

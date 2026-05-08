@@ -26,6 +26,7 @@
     "@fontsource/orbitron": "^5.1.1",
     "@fontsource/share-tech-mono": "^5.1.1",
     "@fontsource/vt323": "^5.1.1",
-    "d3-scale": "^4.0.2"
+    "d3-scale": "^4.0.2",
+    "elkjs": "^0.11.1"
   }
 }

@@ -53,6 +53,15 @@ export type UdmInfo = {
   tempC: number | null;
 };
 
+export type PortNeighbor = {
+  /** Lower-cased mac of the device on the other end of this link. */
+  chassisId: string;
+  /** Remote port identifier as reported via LLDP (often "Port N" or an ifname). */
+  portId: string | null;
+  /** Remote system name (hostname) as reported via LLDP. */
+  systemName: string | null;
+};
+
 export type NetworkPort = {
   idx: number;
   name: string;
@@ -62,6 +71,8 @@ export type NetworkPort = {
   poeWatts: number;
   rxBps: number;
   txBps: number;
+  /** LLDP-discovered neighbor on this port, if any. */
+  neighbor: PortNeighbor | null;
 };
 
 export type NetworkRadio = {
@@ -95,6 +106,10 @@ export type NetworkDevice = {
   tempC: number | null;
   ports: NetworkPort[];
   radios: NetworkRadio[];
+  /** For devices that don't expose per-port LLDP (typically APs), the
+   *  upstream device they're cabled to. Comes from UniFi's `uplink`
+   *  field on the device. */
+  uplink: PortNeighbor | null;
 };
 
 export type Snapshot = {

@@ -53,6 +53,12 @@ export type UdmInfo = {
   tempC: number | null;
 };
 
+export type PortNeighbor = {
+  chassisId: string;
+  portId: string | null;
+  systemName: string | null;
+};
+
 export type NetworkPort = {
   idx: number;
   name: string;
@@ -62,6 +68,7 @@ export type NetworkPort = {
   poeWatts: number;
   rxBps: number;
   txBps: number;
+  neighbor: PortNeighbor | null;
 };
 
 export type NetworkRadio = {
@@ -95,6 +102,7 @@ export type NetworkDevice = {
   tempC: number | null;
   ports: NetworkPort[];
   radios: NetworkRadio[];
+  uplink: PortNeighbor | null;
 };
 
 export type Snapshot = {

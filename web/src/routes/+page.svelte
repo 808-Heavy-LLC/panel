@@ -13,9 +13,10 @@
   import AccessPointsPanel from '$lib/components/AccessPointsPanel.svelte';
   import SwitchesPanel from '$lib/components/SwitchesPanel.svelte';
   import RadiosPanel from '$lib/components/RadiosPanel.svelte';
+  import TopologyPanel from '$lib/components/TopologyPanel.svelte';
   import '../app.css';
 
-  const PAGE_COUNT = 2;
+  const PAGE_COUNT = 3;
   const AUTO_CYCLE_MS = 30_000;
   let currentPage = $state(0);
 
@@ -142,6 +143,21 @@
               {/snippet}
             </HudFrame>
           </div>
+        </main>
+      </section>
+
+      <!-- ============= PAGE 3: Topology ============= -->
+      <section class="page">
+        <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 1fr; grid-template-rows: 1fr;">
+          <HudFrame label="TOPOLOGY · LLDP" accent="primary">
+            {#snippet actions()}
+              {@const linked = panel.devices.filter((d) => d.uplink || d.ports.some((p) => p.neighbor)).length}
+              <span>{linked}/{panel.devices.length} LINKED</span>
+            {/snippet}
+            {#snippet children()}
+              <TopologyPanel />
+            {/snippet}
+          </HudFrame>
         </main>
       </section>
     </div>

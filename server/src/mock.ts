@@ -135,15 +135,26 @@ export function mockUdm(): UdmInfo {
   };
 }
 
+// Mock topology. UDM is the root; AGG_SWITCH_INDEX is the one switch
+// that uplinks directly to the UDM, every other switch uplinks to it.
+// APs uplink to the switch named in their `uplinkSwitch` field.
+const UDM_MAC = 'bb:aa:cc:00:00:00';
+const UDM_NAME = 'udm.808.org';
+const SWITCH_MAC = (i: number): string => `aa:bb:cc:ee:00:${i.toString(16).padStart(2, '0')}`;
+const AP_MAC = (i: number): string => `aa:bb:cc:dd:00:${i.toString(16).padStart(2, '0')}`;
+const AGG_SWITCH_INDEX = 1; // rack-sw-1
+
 const AP_FIXTURES = [
-  { name: 'garage-ap.808.org', model: 'U7PRO', clients: 5, ch24: 6, ch5: 100, ch6: 49 },
-  { name: 'dining-ap.808.org', model: 'U7PRO', clients: 14, ch24: 1, ch5: 36, ch6: 1 },
-  { name: 'living-ap.808.org', model: 'U7PRO', clients: 11, ch24: 11, ch5: 149, ch6: 17 },
-  { name: 'mainbed-ap.808.org', model: 'U7PRO', clients: 6, ch24: 6, ch5: 44, ch6: 33 },
-  { name: 'bnlroom-ap.808.org', model: 'U7PRO', clients: 8, ch24: 1, ch5: 64, ch6: 65 },
-  { name: 'backyard-ap.808.org', model: 'UKPW', clients: 3, ch24: 6, ch5: 36, ch6: 0 },
+  { name: 'garage-ap.808.org', model: 'U7PRO', clients: 5, ch24: 6, ch5: 100, ch6: 49, uplinkSwIdx: 3 },
+  { name: 'dining-ap.808.org', model: 'U7PRO', clients: 14, ch24: 1, ch5: 36, ch6: 1, uplinkSwIdx: 5 },
+  { name: 'living-ap.808.org', model: 'U7PRO', clients: 11, ch24: 11, ch5: 149, ch6: 17, uplinkSwIdx: 4 },
+  { name: 'mainbed-ap.808.org', model: 'U7PRO', clients: 6, ch24: 6, ch5: 44, ch6: 33, uplinkSwIdx: 7 },
+  { name: 'bnlroom-ap.808.org', model: 'U7PRO', clients: 8, ch24: 1, ch5: 64, ch6: 65, uplinkSwIdx: 7 },
+  { name: 'backyard-ap.808.org', model: 'UKPW', clients: 3, ch24: 6, ch5: 36, ch6: 0, uplinkSwIdx: 3 },
 ];
 
+// Each switch uplinks to AGG_SWITCH_INDEX, except the agg itself which
+// uplinks to the UDM.
 const SWITCH_FIXTURES = [
   { name: 'desksw.808.org', model: 'USPM16P', portsActive: 12, portsTotal: 18, poeWatts: 32 },
   { name: 'rack-sw-1.808.org', model: 'USXG24', portsActive: 18, portsTotal: 24, poeWatts: 0 },
@@ -163,7 +174,7 @@ export function mockDevices(): NetworkDevice[] {
     name: a.name,
     model: a.model,
     ip: `192.168.1.${10 + i}`,
-    mac: `aa:bb:cc:dd:00:${i.toString(16).padStart(2, '0')}`,
+    mac: AP_MAC(i),
     state: 1,
     uptimeSec: 1_000_000 + i * 100_000,
     numClients: a.clients,
@@ -184,35 +195,79 @@ export function mockDevices(): NetworkDevice[] {
           ])
         : []),
     ],
+    uplink: {
+      chassisId: SWITCH_MAC(a.uplinkSwIdx),
+      portId: `Port ${i + 2}`,
+      systemName: SWITCH_FIXTURES[a.uplinkSwIdx]?.name ?? null,
+    },
   }));
-  const sws: NetworkDevice[] = SWITCH_FIXTURES.map((s, i) => ({
-    id: `mock-sw-${i}`,
-    type: 'usw',
-    name: s.name,
-    model: s.model,
-    ip: `192.168.1.${30 + i}`,
-    mac: `aa:bb:cc:ee:00:${i.toString(16).padStart(2, '0')}`,
+  const sws: NetworkDevice[] = SWITCH_FIXTURES.map((s, i) => {
+    const isAgg = i === AGG_SWITCH_INDEX;
+    const upstreamMac = isAgg ? UDM_MAC : SWITCH_MAC(AGG_SWITCH_INDEX);
+    const upstreamName = isAgg ? UDM_NAME : SWITCH_FIXTURES[AGG_SWITCH_INDEX]!.name;
+    // Heavier uplink throughput than other ports — this is what the
+    // topology page should highlight.
+    const uplinkRx = (isAgg ? 80_000_000 : 12_000_000) * env + noise(2_000_000);
+    const uplinkTx = (isAgg ? 80_000_000 : 12_000_000) * env + noise(2_000_000);
+    return {
+      id: `mock-sw-${i}`,
+      type: 'usw',
+      name: s.name,
+      model: s.model,
+      ip: `192.168.1.${30 + i}`,
+      mac: SWITCH_MAC(i),
+      state: 1,
+      uptimeSec: 2_000_000 + i * 100_000,
+      numClients: s.portsActive,
+      bytesRate: s.portsActive * 400_000 * env + noise(100_000),
+      rxBytes: 50_000_000_000 + i * 5_000_000_000,
+      txBytes: 50_000_000_000 + i * 5_000_000_000,
+      satisfaction: 95 + Math.floor(noise(5)),
+      cpuPct: 5 + env * 8 + noise(2),
+      memPct: 20 + noise(4),
+      tempC: 42 + env * 4 + noise(2),
+      ports: Array.from({ length: s.portsTotal }, (_, p) => ({
+        idx: p + 1,
+        name: `Port ${p + 1}`,
+        up: p < s.portsActive,
+        speedMbps: p < s.portsActive ? (p === 0 ? 10000 : 1000) : 0,
+        isUplink: p === 0,
+        poeWatts: p < s.portsActive && s.poeWatts > 0 ? s.poeWatts / s.portsActive : 0,
+        rxBps: p === 0 ? Math.max(0, uplinkRx) : p < s.portsActive ? 200_000 + noise(100_000) : 0,
+        txBps: p === 0 ? Math.max(0, uplinkTx) : p < s.portsActive ? 200_000 + noise(100_000) : 0,
+        neighbor:
+          p === 0
+            ? { chassisId: upstreamMac, portId: null, systemName: upstreamName }
+            : null,
+      })),
+      radios: [],
+      uplink: null,
+    };
+  });
+  // UDM as a device so the topology page can render it as a node. WAN
+  // ports sit on the UDM; the LAN port that uplinks to the agg switch
+  // doesn't get a neighbor here because the agg switch already reports
+  // the link back from its side (deduped in the topology builder).
+  const udm: NetworkDevice = {
+    id: 'mock-udm',
+    type: 'udm',
+    name: UDM_NAME,
+    model: 'UDM-Pro-Max',
+    ip: '192.168.1.1',
+    mac: UDM_MAC,
     state: 1,
-    uptimeSec: 2_000_000 + i * 100_000,
-    numClients: s.portsActive,
-    bytesRate: s.portsActive * 400_000 * env + noise(100_000),
-    rxBytes: 50_000_000_000 + i * 5_000_000_000,
-    txBytes: 50_000_000_000 + i * 5_000_000_000,
-    satisfaction: 95 + Math.floor(noise(5)),
-    cpuPct: 5 + env * 8 + noise(2),
-    memPct: 20 + noise(4),
-    tempC: 42 + env * 4 + noise(2),
-    ports: Array.from({ length: s.portsTotal }, (_, p) => ({
-      idx: p + 1,
-      name: `Port ${p + 1}`,
-      up: p < s.portsActive,
-      speedMbps: p < s.portsActive ? (p === 0 ? 10000 : 1000) : 0,
-      isUplink: p === 0,
-      poeWatts: p < s.portsActive && s.poeWatts > 0 ? s.poeWatts / s.portsActive : 0,
-      rxBps: p < s.portsActive ? 200_000 + noise(100_000) : 0,
-      txBps: p < s.portsActive ? 200_000 + noise(100_000) : 0,
-    })),
+    uptimeSec: 1_234_567 + Math.floor(phase),
+    numClients: 0,
+    bytesRate: 0,
+    rxBytes: 0,
+    txBytes: 0,
+    satisfaction: 100,
+    cpuPct: 12 + env * 25 + noise(3),
+    memPct: 38 + noise(4),
+    tempC: 52 + env * 4 + noise(1),
+    ports: [],
     radios: [],
-  }));
-  return [...aps, ...sws];
+    uplink: null,
+  };
+  return [udm, ...aps, ...sws];
 }
