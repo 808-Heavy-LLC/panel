@@ -18,10 +18,41 @@
 
   const PAGE_COUNT = 3;
   const AUTO_CYCLE_MS = 30_000;
-  let currentPage = $state(0);
+  // displayIdx ranges 0..PAGE_COUNT. Indices 0..PAGE_COUNT-1 are the
+  // real pages; index PAGE_COUNT is a clone of page 0 rendered after
+  // the last page so the auto-cycle wraps from right to left without
+  // a visible snap. When we land on the clone we instantly reset to 0
+  // with the transition disabled, then re-enable it on the next frame.
+  let displayIdx = $state(0);
+  let animate = $state(true);
+  const activeDot = $derived(displayIdx >= PAGE_COUNT ? 0 : displayIdx);
 
   function go(delta: 1 | -1): void {
-    currentPage = (currentPage + delta + PAGE_COUNT) % PAGE_COUNT;
+    if (delta === 1) {
+      // Block double-advances while we're sitting on the clone, since
+      // the snap-back hasn't run yet.
+      if (displayIdx >= PAGE_COUNT) return;
+      displayIdx += 1;
+    } else {
+      if (displayIdx <= 0) {
+        // Backward at the first page: jump instantly to the last page.
+        // Auto-cycle never goes backward, so this only fires on manual
+        // left-arrow nav.
+        animate = false;
+        displayIdx = PAGE_COUNT - 1;
+        requestAnimationFrame(() => requestAnimationFrame(() => (animate = true)));
+      } else {
+        displayIdx -= 1;
+      }
+    }
+  }
+
+  function onTransitionEnd(): void {
+    if (displayIdx === PAGE_COUNT) {
+      animate = false;
+      displayIdx = 0;
+      requestAnimationFrame(() => requestAnimationFrame(() => (animate = true)));
+    }
   }
 
   onMount(() => {
@@ -53,64 +84,70 @@
 <div class="panel-root flex h-screen w-screen flex-col">
   <HudHeader />
 
-  <div class="page-viewport min-h-0 flex-1 overflow-hidden">
-    <div class="page-track" style="transform: translateX(-{currentPage * 100}%);">
-      <!-- ============= PAGE 1: Internet / Traffic ============= -->
-      <section class="page">
-        <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 2fr 1fr 1fr; grid-template-rows: 1.1fr 1fr;">
-          <div style="grid-column: 1 / 3" class="min-h-0 min-w-0">
-            <HudFrame label="WAN THROUGHPUT" accent="primary">
-              {#snippet actions()}
-                <span>WINDOW · 90s</span>
-              {/snippet}
-              {#snippet children()}
-                <div class="flex h-full flex-col gap-3">
-                  {#each panel.wans as wan (wan.id)}
-                    <div class="min-h-0 flex-1">
-                      <BandwidthChart wanId={wan.id} />
-                    </div>
-                    {#if wan.id !== panel.wans[panel.wans.length - 1]?.id}
-                      <div class="border-t border-[var(--c-line)]"></div>
-                    {/if}
-                  {/each}
-                  {#if panel.wans.length === 0}
-                    <div class="grid h-full place-items-center text-[11px] uppercase tracking-widest text-[var(--c-text-dim)]">
-                      Awaiting WAN data…
-                    </div>
-                  {/if}
+  {#snippet page1Content()}
+    <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 2fr 1fr 1fr; grid-template-rows: 1.1fr 1fr;">
+      <div style="grid-column: 1 / 3" class="min-h-0 min-w-0">
+        <HudFrame label="WAN THROUGHPUT" accent="primary">
+          {#snippet actions()}
+            <span>WINDOW · 90s</span>
+          {/snippet}
+          {#snippet children()}
+            <div class="flex h-full flex-col gap-3">
+              {#each panel.wans as wan (wan.id)}
+                <div class="min-h-0 flex-1">
+                  <BandwidthChart wanId={wan.id} />
                 </div>
-              {/snippet}
-            </HudFrame>
-          </div>
+                {#if wan.id !== panel.wans[panel.wans.length - 1]?.id}
+                  <div class="border-t border-[var(--c-line)]"></div>
+                {/if}
+              {/each}
+              {#if panel.wans.length === 0}
+                <div class="grid h-full place-items-center text-[11px] uppercase tracking-widest text-[var(--c-text-dim)]">
+                  Awaiting WAN data…
+                </div>
+              {/if}
+            </div>
+          {/snippet}
+        </HudFrame>
+      </div>
 
-          <HudFrame label="GATEWAY · UDM PRO MAX" accent="secondary">
-            {#snippet children()}
-              <UdmStats />
-            {/snippet}
-          </HudFrame>
+      <HudFrame label="GATEWAY · UDM PRO MAX" accent="secondary">
+        {#snippet children()}
+          <UdmStats />
+        {/snippet}
+      </HudFrame>
 
-          <HudFrame label="TOP CONSUMERS" accent="primary">
-            {#snippet actions()}
-              <span>BY THROUGHPUT</span>
-            {/snippet}
-            {#snippet children()}
-              <ClientsPanel />
-            {/snippet}
-          </HudFrame>
+      <HudFrame label="TOP CONSUMERS" accent="primary">
+        {#snippet actions()}
+          <span>BY THROUGHPUT</span>
+        {/snippet}
+        {#snippet children()}
+          <ClientsPanel />
+        {/snippet}
+      </HudFrame>
 
-          <HudFrame label="TOP APPLICATIONS" accent="primary">
-            {#snippet children()}
-              <DpiPanel source="apps" />
-            {/snippet}
-          </HudFrame>
+      <HudFrame label="TOP APPLICATIONS" accent="primary">
+        {#snippet children()}
+          <DpiPanel source="apps" />
+        {/snippet}
+      </HudFrame>
 
-          <HudFrame label="TOP CATEGORIES" accent="primary">
-            {#snippet children()}
-              <DpiPanel source="categories" />
-            {/snippet}
-          </HudFrame>
-        </main>
-      </section>
+      <HudFrame label="TOP CATEGORIES" accent="primary">
+        {#snippet children()}
+          <DpiPanel source="categories" />
+        {/snippet}
+      </HudFrame>
+    </main>
+  {/snippet}
+
+  <div class="page-viewport min-h-0 flex-1 overflow-hidden">
+    <div
+      class="page-track"
+      style="transform: translateX(-{displayIdx * 100}%); {animate ? '' : 'transition: none;'}"
+      ontransitionend={onTransitionEnd}
+    >
+      <!-- ============= PAGE 1: Internet / Traffic ============= -->
+      <section class="page">{@render page1Content()}</section>
 
       <!-- ============= PAGE 2: Layer 2 ============= -->
       <section class="page">
@@ -160,12 +197,18 @@
           </HudFrame>
         </main>
       </section>
+
+      <!-- Wrap clone: rendered after Page 3 so the auto-cycle slides
+           continuously rightward through this duplicate of Page 1. The
+           transition-end handler snaps displayIdx back to 0 with no
+           animation so the user never sees the rewind. -->
+      <section class="page" aria-hidden="true">{@render page1Content()}</section>
     </div>
   </div>
 
   <div class="page-dots">
     {#each Array(PAGE_COUNT) as _, i}
-      <span class="dot" class:active={currentPage === i}></span>
+      <span class="dot" class:active={activeDot === i}></span>
     {/each}
   </div>
 </div>
