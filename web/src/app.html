@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#06080c" />
     <title>panel</title>
+    <script>
+      if (location.search.includes('kiosk=1')) document.documentElement.dataset.kiosk = '1';
+    </script>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">
