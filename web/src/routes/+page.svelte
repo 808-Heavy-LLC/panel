@@ -28,6 +28,9 @@
   }
 
   onMount(() => {
+    if (new URLSearchParams(window.location.search).get('kiosk') === '1') {
+      document.documentElement.dataset.kiosk = '1';
+    }
     const dispose = theme.init();
     const stop = connectWs();
     const stopGuard = startBurnInGuard();

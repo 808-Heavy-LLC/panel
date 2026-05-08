@@ -4,6 +4,8 @@
 set -euo pipefail
 
 PANEL_URL="${PANEL_URL:-http://localhost:4000}"
+# URL the browser actually opens — page reads ?kiosk=1 to hide the cursor.
+PANEL_KIOSK_URL="${PANEL_URL%/}/?kiosk=1"
 PROFILE_DIR="${PANEL_KIOSK_PROFILE:-$HOME/.config/panel-kiosk}"
 
 # Wait for the panel server to come up before opening the browser.
@@ -61,4 +63,4 @@ exec "$BROWSER" \
   --autoplay-policy=no-user-gesture-required \
   --disable-session-crashed-bubble \
   --disable-component-update \
-  "$PANEL_URL"
+  "$PANEL_KIOSK_URL"
