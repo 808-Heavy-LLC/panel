@@ -54,9 +54,9 @@
   <HudHeader />
 
   <div class="page-viewport min-h-0 flex-1 overflow-hidden">
-    <div class="page-track" style="transform: translateX(-{currentPage * 100}%);">
+    <div class="page-stage">
       <!-- ============= PAGE 1: Internet / Traffic ============= -->
-      <section class="page">
+      <section class="page" class:active={currentPage === 0}>
         <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 2fr 1fr 1fr; grid-template-rows: 1.1fr 1fr;">
           <div style="grid-column: 1 / 3" class="min-h-0 min-w-0">
             <HudFrame label="WAN THROUGHPUT" accent="primary">
@@ -113,7 +113,7 @@
       </section>
 
       <!-- ============= PAGE 2: Layer 2 ============= -->
-      <section class="page">
+      <section class="page" class:active={currentPage === 1}>
         <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 1fr 1fr; grid-template-rows: 1.2fr 1fr;">
           <HudFrame label="ACCESS POINTS" accent="primary">
             {#snippet actions()}
@@ -147,7 +147,7 @@
       </section>
 
       <!-- ============= PAGE 3: Topology ============= -->
-      <section class="page">
+      <section class="page" class:active={currentPage === 2}>
         <main class="grid h-full min-h-0 gap-4 p-4" style="grid-template-columns: 1fr; grid-template-rows: 1fr;">
           <HudFrame label="TOPOLOGY · LLDP" accent="primary">
             {#snippet actions()}
@@ -179,18 +179,22 @@
   .page-viewport {
     position: relative;
   }
-  .page-track {
-    display: flex;
-    flex-direction: row;
+  .page-stage {
+    position: relative;
     height: 100%;
     width: 100%;
-    transition: transform 700ms cubic-bezier(0.65, 0, 0.35, 1);
-    will-change: transform;
   }
   .page {
-    flex: 0 0 100%;
-    height: 100%;
-    min-width: 0;
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 600ms ease;
+    will-change: opacity;
+  }
+  .page.active {
+    opacity: 1;
+    pointer-events: auto;
   }
   .page-dots {
     display: flex;
