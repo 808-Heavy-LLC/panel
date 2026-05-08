@@ -18,40 +18,43 @@
 
   const PAGE_COUNT = 3;
   const AUTO_CYCLE_MS = 30_000;
-  // displayIdx ranges 0..PAGE_COUNT. Indices 0..PAGE_COUNT-1 are the
-  // real pages; index PAGE_COUNT is a clone of page 0 rendered after
-  // the last page so the auto-cycle wraps from right to left without
-  // a visible snap. When we land on the clone we instantly reset to 0
-  // with the transition disabled, then re-enable it on the next frame.
+  // Track-slide duration. CSS reads it via the inline `--track-ms`
+  // custom property below, so JS and CSS can't drift.
+  const TRACK_MS = 700;
+  // displayIdx ranges 0..PAGE_COUNT. The slot at PAGE_COUNT is a clone
+  // of page 0 rendered after the last page, so the auto-cycle keeps
+  // sliding right-to-left forever — when we land on the clone we
+  // teleport back to displayIdx 0 with the transition disabled, then
+  // re-enable it on the next frame. Result: visually identical to
+  // 1,2,3,1,2,3,…
   let displayIdx = $state(0);
   let animate = $state(true);
   const activeDot = $derived(displayIdx >= PAGE_COUNT ? 0 : displayIdx);
 
-  function go(delta: 1 | -1): void {
-    if (delta === 1) {
-      // Block double-advances while we're sitting on the clone, since
-      // the snap-back hasn't run yet.
-      if (displayIdx >= PAGE_COUNT) return;
-      displayIdx += 1;
-    } else {
-      if (displayIdx <= 0) {
-        // Backward at the first page: jump instantly to the last page.
-        // Auto-cycle never goes backward, so this only fires on manual
-        // left-arrow nav.
-        animate = false;
-        displayIdx = PAGE_COUNT - 1;
-        requestAnimationFrame(() => requestAnimationFrame(() => (animate = true)));
-      } else {
-        displayIdx -= 1;
-      }
-    }
+  function snapTo(idx: number): void {
+    animate = false;
+    displayIdx = idx;
+    // Two rAFs: the first lets the no-transition transform commit;
+    // the second re-enables animation for the next user-driven slide.
+    requestAnimationFrame(() => requestAnimationFrame(() => (animate = true)));
   }
 
-  function onTransitionEnd(): void {
-    if (displayIdx === PAGE_COUNT) {
-      animate = false;
-      displayIdx = 0;
-      requestAnimationFrame(() => requestAnimationFrame(() => (animate = true)));
+  function go(delta: 1 | -1): void {
+    if (delta === 1) {
+      // Block while we're sitting on the clone — the snap-back is
+      // already scheduled.
+      if (displayIdx >= PAGE_COUNT) return;
+      displayIdx += 1;
+      if (displayIdx === PAGE_COUNT) {
+        // Schedule the teleport for just after the slide finishes.
+        // Using a timer (vs. transitionend) avoids the bug where
+        // unrelated child transitions inside the page bubble up and
+        // fire the handler mid-slide.
+        window.setTimeout(() => snapTo(0), TRACK_MS + 30);
+      }
+    } else {
+      if (displayIdx <= 0) snapTo(PAGE_COUNT - 1);
+      else displayIdx -= 1;
     }
   }
 
@@ -143,8 +146,7 @@
   <div class="page-viewport min-h-0 flex-1 overflow-hidden">
     <div
       class="page-track"
-      style="transform: translateX(-{displayIdx * 100}%); {animate ? '' : 'transition: none;'}"
-      ontransitionend={onTransitionEnd}
+      style="--track-ms: {TRACK_MS}ms; transform: translateX(-{displayIdx * 100}%); {animate ? '' : 'transition: none;'}"
     >
       <!-- ============= PAGE 1: Internet / Traffic ============= -->
       <section class="page">{@render page1Content()}</section>
@@ -227,7 +229,7 @@
     flex-direction: row;
     height: 100%;
     width: 100%;
-    transition: transform 700ms cubic-bezier(0.65, 0, 0.35, 1);
+    transition: transform var(--track-ms, 700ms) cubic-bezier(0.65, 0, 0.35, 1);
     will-change: transform;
   }
   .page {
