@@ -614,9 +614,11 @@ export class UnifiClient {
 
   async getDevices(): Promise<NetworkDevice[]> {
     if (this.mode !== 'legacy') return [];
-    // The v2 device endpoint doesn't include poe_power on this firmware
-    // — the per-port wattage only lives on the legacy stat/device. Fetch
-    // both in parallel and merge the wattages by (device mac, port idx).
+    // The v2 device endpoint doesn't include poe_power on some firmwares,
+    // and on the cn10k gateway it also returns empty LLDP (no port-level
+    // lldp_* fields and an empty device.lldp_table). Both the per-port
+    // wattage and the device-level LLDP table live on the legacy
+    // /stat/device endpoint, so we fetch both and merge by device mac.
     const [v2, legacy] = await Promise.all([
       this.legacyGet<{ network_devices?: RawV2Device[] }>(
         `/v2/api/site/${this.opts.site}/device?separateUnmanaged=true&includeTrafficUsage=true`,
@@ -625,13 +627,20 @@ export class UnifiClient {
         data?: Array<{
           mac?: string;
           port_table?: Array<{ port_idx?: number; poe_power?: string }>;
+          lldp_table?: Array<{
+            local_port_idx?: number;
+            chassis_id?: string;
+            port_id?: string;
+            system_name?: string;
+          }>;
         }>;
       }>(`/api/s/${this.opts.site}/stat/device`).catch((e) => {
-        console.error('[unifi] PoE map fetch failed:', e);
+        console.error('[unifi] legacy device fetch failed:', e);
         return { data: [] as never[] };
       }),
     ]);
     const poeByMac = new Map<string, Map<number, number>>();
+    const lldpByMac = new Map<string, RawV2Device['lldp_table']>();
     for (const d of legacy.data ?? []) {
       const mac = (d.mac ?? '').toLowerCase();
       if (!mac) continue;
@@ -643,10 +652,16 @@ export class UnifiClient {
         }
       }
       if (ports.size > 0) poeByMac.set(mac, ports);
+      if (d.lldp_table && d.lldp_table.length > 0) lldpByMac.set(mac, d.lldp_table);
     }
-    return (v2.network_devices ?? []).map((d) =>
-      toDevice(d, poeByMac.get((d.mac ?? '').toLowerCase()) ?? new Map()),
-    );
+    return (v2.network_devices ?? []).map((d) => {
+      const mac = (d.mac ?? '').toLowerCase();
+      return toDevice(
+        d,
+        poeByMac.get(mac) ?? new Map(),
+        lldpByMac.get(mac) ?? null,
+      );
+    });
   }
 
   /** Health subsystems from `/api/s/{site}/stat/health`. UniFi returns
@@ -848,12 +863,19 @@ function toRadio(r: NonNullable<RawV2Device['radio_table_stats']>[number]): Netw
   };
 }
 
-function toDevice(d: RawV2Device, poeByIdx: Map<number, number>): NetworkDevice {
+function toDevice(
+  d: RawV2Device,
+  poeByIdx: Map<number, number>,
+  legacyLldp: RawV2Device['lldp_table'] | null,
+): NetworkDevice {
   const stats = d['system-stats'];
   const type = (['uap', 'usw', 'udm', 'uci'] as const).includes(d.type as never)
     ? (d.type as NetworkDevice['type'])
     : 'other';
   const deviceLldp = new Map<number, PortNeighbor>();
+  // v2 entries win when both endpoints supply data for the same port; the
+  // legacy /stat/device payload backfills ports where v2 is empty (this is
+  // the common case on the cn10k gateway, where v2 returns no LLDP at all).
   for (const e of d.lldp_table ?? []) {
     const idx = e.local_port_idx;
     const chassis = normalizeMac(e.chassis_id);
@@ -864,6 +886,17 @@ function toDevice(d: RawV2Device, poeByIdx: Map<number, number>): NetworkDevice 
         systemName: e.system_name ?? null,
       });
     }
+  }
+  for (const e of legacyLldp ?? []) {
+    const idx = e.local_port_idx;
+    const chassis = normalizeMac(e.chassis_id);
+    if (typeof idx !== 'number' || !chassis) continue;
+    if (deviceLldp.has(idx)) continue;
+    deviceLldp.set(idx, {
+      chassisId: chassis,
+      portId: e.port_id ?? null,
+      systemName: e.system_name ?? null,
+    });
   }
   const ports = (d.port_table ?? []).map((p) => toPort(p, deviceLldp, poeByIdx));
   const uplinkMac = normalizeMac(d.uplink?.uplink_mac);
