@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { config } from './config.js';
 import { mockClients, mockDevices, mockDpi, mockHealth, mockUdm, mockWans } from './mock.js';
-import { autoDetectWanInterfaces, SnmpClient, type SnmpInterface } from './snmp.js';
+import { autoDetectWanInterfaces, resolveWanInterfaces, SnmpClient, type SnmpInterface } from './snmp.js';
 import { store } from './store.js';
 import type { ClientStat, DpiCategory, HealthSubsystem, NetworkDevice, UdmInfo, Wan } from './types.js';
 import { type GatewayWanDetails, UnifiClient } from './unifi.js';
@@ -170,24 +170,48 @@ export async function startPoller(): Promise<void> {
       `[poller] using configured WAN ifIndexes: ${wanIfaces.map((i) => `${i.ifIndex}=${i.ifName}`).join(', ')}`,
     );
   } else {
-    wanIfaces = autoDetectWanInterfaces(interfaces);
-    console.log(
-      `[poller] auto-detected WAN interfaces: ${wanIfaces.map((i) => `${i.ifIndex}=${i.ifName}`).join(', ') || 'none'}`,
-    );
+    // Self-heal: prefer the UniFi controller's own WAN1/WAN2 designation
+    // (the user already maintains this in the UniFi UI). If the controller
+    // isn't reachable or doesn't expose ifNames, fall back to identifying
+    // WANs by the presence of a routable public IPv4 (see
+    // autoDetectWanInterfaces).
+    let controllerIfNames: string[] = [];
+    if (unifiOk) {
+      try {
+        const details = await unifi.getWanDetails();
+        controllerIfNames = details.map((d) => d.ifName).filter((n) => n);
+      } catch (err) {
+        console.error('[poller] controller WAN designation lookup failed:', err);
+      }
+    }
+    if (controllerIfNames.length > 0) {
+      wanIfaces = resolveWanInterfaces(interfaces, controllerIfNames);
+      console.log(
+        `[poller] controller-designated WAN interfaces: ${wanIfaces.map((i) => `${i.ifIndex}=${i.ifName}`).join(', ') || 'none'} (from ${controllerIfNames.join(',')})`,
+      );
+    }
+    if (wanIfaces.length === 0) {
+      wanIfaces = autoDetectWanInterfaces(interfaces);
+      console.log(
+        `[poller] auto-detected WAN interfaces: ${wanIfaces.map((i) => `${i.ifIndex}=${i.ifName} ip=${i.ipv4Addrs.join('|') || '-'}`).join(', ') || 'none'}`,
+      );
+    }
   }
 
   const snmpOk = wanIfaces.length > 0;
   store.setFeatures({ snmpAvailable: snmpOk });
 
   // Build runtime WAN entries; label from env or fallback to "WAN N".
-  // Prefer ifAlias (UDM sets it to "eth9"/"eth10") over the long ifDescr.
+  // ifName is now walked from the canonical SNMP ifName OID
+  // (1.3.6.1.2.1.31.1.1.1.1) — kernel name like "eth12". Older code fell
+  // back to ifAlias or a regex against ifDescr; that's only needed if the
+  // agent doesn't expose ifName.
   const wans: WanRuntime[] = wanIfaces.map((iface, i) => ({
     id: `wan${i + 1}`,
     ifIndex: iface.ifIndex,
     ifName:
-      iface.ifAlias ||
-      iface.ifName.match(/eth\d+$/)?.[0] ||
       iface.ifName ||
+      iface.ifAlias ||
       `if${iface.ifIndex}`,
     label: config.snmp.wanLabels[i] ?? `WAN ${i + 1}`,
     speedBitsPerSec: iface.ifHighSpeedMbps * 1_000_000,
