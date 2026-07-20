@@ -52,10 +52,18 @@ The UDM Pro Max exposes two APIs and the poller uses both deliberately:
 ## Frontend specifics
 
 - **Svelte 5 runes** — state classes use `$state(...)` (see `store.svelte.ts`, `theme.svelte.ts`). Don't reach for stores from `svelte/store`.
-- **Themes** — three themes live in CSS custom properties under `[data-theme="..."]` (see `app.css`). `theme.svelte.ts` swaps `documentElement.dataset.theme`. Keyboard: `t`/`T` cycles, `1-9` jumps. New themes go in `THEMES`, `THEME_LABELS`, and the CSS.
+- **Themes** — two themes (`xbox`, `hud`) live in CSS custom properties under `[data-theme="..."]` (see `app.css`). `theme.svelte.ts` swaps `documentElement.dataset.theme`. Keyboard: `t`/`T` cycles, `1-9` jumps. New themes go in `THEMES`, `THEME_LABELS`, and the CSS.
+- **Page cycling** — `+page.svelte` auto-cycles 5 pages every 30s. Keys: `←`/`→` step, `Space`/`P` pause the auto-cycle. `HotkeyBar.svelte` renders the always-visible legend under the header (incl. the Ctrl+Alt+K desktop break-out).
 - **Burn-in guard** (`web/src/lib/burnInGuard.ts`) — periodically translates `.panel-root` by a few pixels and cycles the theme so static bright UI doesn't burn into the kiosk LCD. All themes must have similar animation cost; a previous "matrix" theme was dropped because it was too expensive during the cycle.
 - The page is one route (`+page.svelte`) — this is a single-screen kiosk dashboard, not a multi-page app.
 
 ## Deployment (Pi kiosk)
 
-`deploy/install.sh` builds and installs `panel.service` (systemd) running on port 4000. `deploy/kiosk.sh` is what wayfire/LXDE autostart calls — it waits for `/api/health`, picks the right Ozone platform (Wayland vs X11), and exec's Chromium in kiosk mode pointed at `http://localhost:4000`. `deploy/tmpfiles-panel-fan.conf` persists quieter pwm-fan trip points across reboots.
+Two installers. `deploy/install.sh` builds and installs `panel.service` (systemd) — the server on port 4000. `deploy/install-plasma-kiosk.sh` sets up the display side on a Pi 5 (Pi OS / Debian trixie): SDDM autologin → **KDE Plasma (Wayland)** → the Chromium kiosk fullscreen. (This replaced an earlier labwc/wayfire setup; `deploy/kiosk-toggle.sh` is the labwc-era toggle, kept only for that rollback path.)
+
+Kiosk display chain, all in `deploy/`:
+- `kiosk.sh` — waits for `/api/health`, then exec's Chromium `--kiosk` as an **XWayland** client (`--ozone-platform=x11`, so `unclutter` can hide the cursor), wrapped in `kde-inhibit --screenSaver --power` so KDE never blanks or locks the screen while the kiosk runs.
+- `kiosk-respawn.sh` — compositor-agnostic respawn loop (replaces Pi OS's `lwrespawn`, which only loops under labwc); relaunches Chromium on crash. Launched from `~/.config/autostart/panel-kiosk.desktop`.
+- `panel-toggle.sh` — bound to **Ctrl+Alt+K** (a `kglobalshortcutsrc` `[services]` launch entry — KWin owns global shortcuts on Plasma 6) and exposed as a desktop icon. Kills the kiosk (respawn wrapper + browser) to drop to a clean Plasma desktop, and relaunches on the next toggle. Do **not** use KWin "Show Desktop" for this — minimize is wrong for a fullscreen kiosk (it pops back when another window opens).
+
+`deploy/tmpfiles-panel-fan.conf` persists quieter pwm-fan trip points across reboots.

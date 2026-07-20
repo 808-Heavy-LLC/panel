@@ -40,18 +40,11 @@ echo "    status:   sudo systemctl status panel"
 echo "    logs:     journalctl -u panel -f"
 echo "    URL:      http://localhost:4000"
 echo
-echo "==> To run the kiosk display, set up Chromium autostart:"
+echo "==> To run the kiosk display on KDE Plasma (current setup):"
+echo "        $PANEL_DIR/deploy/install-plasma-kiosk.sh   # then reboot"
 echo
-echo "    Wayland (Pi OS Bookworm default):"
-echo "        mkdir -p ~/.config/wayfire.ini.d"
-echo "        cat >> ~/.config/wayfire.ini <<EOF"
-echo "        [autostart]"
-echo "        panel = $PANEL_DIR/deploy/kiosk.sh"
-echo "        EOF"
-echo
-echo "    X11 (LXDE):"
-echo "        mkdir -p ~/.config/lxsession/LXDE-pi"
-echo "        echo \"@$PANEL_DIR/deploy/kiosk.sh\" >> ~/.config/lxsession/LXDE-pi/autostart"
+echo "    That sets up SDDM autologin -> Plasma -> the Chromium kiosk, with"
+echo "    Ctrl+Alt+K (and a desktop icon) to toggle out to the KDE desktop."
 echo
 echo "    Test the kiosk script directly with:"
 echo "        $PANEL_DIR/deploy/kiosk.sh"

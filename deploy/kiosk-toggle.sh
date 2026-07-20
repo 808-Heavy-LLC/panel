@@ -11,8 +11,12 @@ if pgrep -f "lwrespawn.*kiosk" >/dev/null 2>&1; then
   # Kiosk is up → tear it down, bring up the standard desktop.
   pkill -f "lwrespawn.*kiosk" || true
   pkill -f "chromium .*--kiosk" || true
-  /usr/bin/lwrespawn /usr/bin/pcmanfm-pi </dev/null >/dev/null 2>&1 &
-  /usr/bin/lwrespawn /usr/bin/wf-panel-pi </dev/null >/dev/null 2>&1 &
+  # Only spawn desktop bits that aren't already running (labwc autostart may
+  # have started them at login) so we don't stack duplicate panels/managers.
+  pgrep -x pcmanfm-pi >/dev/null 2>&1 || \
+    /usr/bin/lwrespawn /usr/bin/pcmanfm-pi </dev/null >/dev/null 2>&1 &
+  pgrep -x wf-panel-pi >/dev/null 2>&1 || \
+    /usr/bin/lwrespawn /usr/bin/wf-panel-pi </dev/null >/dev/null 2>&1 &
 else
   # Desktop is up → tear it down, bring back the kiosk.
   pkill -f "lwrespawn.*pcmanfm-pi" || true
