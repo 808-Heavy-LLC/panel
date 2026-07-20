@@ -4,6 +4,7 @@
   import { theme } from '$lib/theme.svelte';
   import { startBurnInGuard } from '$lib/burnInGuard';
   import HudHeader from '$lib/components/HudHeader.svelte';
+  import HotkeyBar from '$lib/components/HotkeyBar.svelte';
   import HudFrame from '$lib/components/HudFrame.svelte';
   import BandwidthChart from '$lib/components/BandwidthChart.svelte';
   import ClientsPanel from '$lib/components/ClientsPanel.svelte';
@@ -22,6 +23,7 @@
   const PAGE_COUNT = 5;
   const AUTO_CYCLE_MS = 30_000;
   let currentPage = $state(0);
+  let paused = $state(false);
 
   function go(delta: 1 | -1): void {
     currentPage = (currentPage + delta + PAGE_COUNT) % PAGE_COUNT;
@@ -31,7 +33,9 @@
     const dispose = theme.init();
     const stop = connectWs();
     const stopGuard = startBurnInGuard();
-    const cycleTimer = window.setInterval(() => go(1), AUTO_CYCLE_MS);
+    const cycleTimer = window.setInterval(() => {
+      if (!paused) go(1);
+    }, AUTO_CYCLE_MS);
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement | null)?.matches?.('input, textarea, [contenteditable]')) return;
       if (e.key === 'ArrowRight') {
@@ -40,6 +44,10 @@
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         go(-1);
+      } else if (e.key === ' ' || e.key === 'p' || e.key === 'P') {
+        // Space (or P) toggles the auto-cycle. Manual ←/→ still work while paused.
+        e.preventDefault();
+        paused = !paused;
       }
     };
     window.addEventListener('keydown', onKey);
@@ -63,6 +71,7 @@
     <div class="xbox-ring xbox-ring-3"></div>
   </div>
   <HudHeader />
+  <HotkeyBar {paused} />
 
   <div class="page-viewport min-h-0 flex-1 overflow-hidden">
     <div class="page-stage">

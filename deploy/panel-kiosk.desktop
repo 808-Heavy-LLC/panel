@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Panel Kiosk
+Comment=Fullscreen Chromium kiosk for the network panel dashboard
+# Installed to ~/.config/autostart/ so Plasma launches it after login.
+# kiosk-respawn.sh keeps it alive across Chromium crashes (see that script).
+Exec=/home/mackerman/panel/deploy/kiosk-respawn.sh
+X-KDE-autostart-phase=2
+Terminal=false
+NoDisplay=true

@@ -50,7 +50,18 @@ if command -v unclutter >/dev/null 2>&1; then
   unclutter -idle 0 -root &
 fi
 
-exec "$BROWSER" \
+# Keep the screen awake and unlocked for as long as the kiosk runs. Under
+# Plasma/KWin the compositor (not `xset`) owns screen blanking and the KDE
+# screen locker, so hold a KDE inhibit for both. kde-inhibit runs Chromium as
+# its child and releases the inhibit only when Chromium exits. On non-KDE
+# sessions (e.g. the labwc rollback path) kde-inhibit is absent, so fall back
+# to launching the browser directly and rely on the xset calls above.
+INHIBIT=""
+if command -v kde-inhibit >/dev/null 2>&1; then
+  INHIBIT="kde-inhibit --screenSaver --power"
+fi
+
+exec $INHIBIT "$BROWSER" \
   --kiosk \
   $PLATFORM_FLAG \
   --enable-features=UseOzonePlatform \

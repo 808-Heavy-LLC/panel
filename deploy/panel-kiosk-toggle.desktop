@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Panel Kiosk
+GenericName=Network Panel Toggle
+Comment=Show or hide the fullscreen network panel kiosk
+Exec=/home/mackerman/panel/deploy/panel-toggle.sh
+Icon=network-workgroup
+Terminal=false
+Categories=Utility;Network;
+Keywords=panel;kiosk;dashboard;network;
