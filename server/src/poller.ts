@@ -20,6 +20,11 @@ type MonthlyState = { month: string; wans: Record<string, MonthlyEntry> };
 const MONTHLY_PATH = join(process.cwd(), 'data', 'monthly.json');
 const MONTHLY_WRITE_INTERVAL_MS = 30_000;
 
+/** Consecutive failed getCounters polls before we assume our latched
+ *  ifIndexes are stale and fall back to re-discovery. At the default 2s
+ *  tick that's ~30s of failures. */
+const COUNTER_FAILURE_LIMIT = 15;
+
 function currentMonthLabel(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -127,11 +132,15 @@ export async function startPoller(): Promise<void> {
     console.error('[poller] UDM API connection failed:', err);
   }
   store.setSource('live');
-  store.setFeatures({
-    dpiAvailable: unifiOk && unifi.getMode() === 'legacy',
-    perClientRates: unifiOk && unifi.getMode() === 'legacy',
-    snmpAvailable: false,
-  });
+  const publishFeatures = (snmpAvailable: boolean): void => {
+    const legacy = unifiOk && unifi.getMode() === 'legacy';
+    store.setFeatures({
+      dpiAvailable: legacy,
+      perClientRates: legacy,
+      snmpAvailable,
+    });
+  };
+  publishFeatures(false);
 
   // === SNMP setup ===
   const snmpClient = new SnmpClient({
@@ -140,36 +149,25 @@ export async function startPoller(): Promise<void> {
     port: config.snmp.port,
   });
 
-  // Retry listInterfaces with backoff: a single transient genErr from the UDM
-  // SNMP agent at startup must not leave the panel WAN-less until the next
-  // service restart.
-  let interfaces: SnmpInterface[] = [];
-  const backoffsMs = [0, 1000, 2000, 5000, 10000];
-  for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
-    const delay = backoffsMs[attempt] ?? 0;
-    if (delay > 0) await new Promise((r) => setTimeout(r, delay));
-    try {
-      interfaces = await snmpClient.listInterfaces();
-      console.log(`[poller] SNMP discovered ${interfaces.length} interfaces`);
-      break;
-    } catch (err) {
-      const last = attempt === backoffsMs.length - 1;
-      console.error(
-        `[poller] SNMP listInterfaces failed (attempt ${attempt + 1}/${backoffsMs.length})${last ? ' — giving up' : ', retrying'}:`,
-        err,
-      );
-    }
-  }
+  const fmtIfaces = (ifs: { ifIndex: number; ifName: string }[]): string =>
+    ifs.map((i) => `${i.ifIndex}=${i.ifName}`).join(', ') || 'none';
 
-  let wanIfaces: SnmpInterface[] = [];
-  if (config.snmp.wanIfIndexes.length > 0) {
-    wanIfaces = config.snmp.wanIfIndexes
-      .map((idx) => interfaces.find((i) => i.ifIndex === idx))
-      .filter((i): i is SnmpInterface => !!i);
-    console.log(
-      `[poller] using configured WAN ifIndexes: ${wanIfaces.map((i) => `${i.ifIndex}=${i.ifName}`).join(', ')}`,
-    );
-  } else {
+  /** One WAN discovery pass: walk the interface table, then pick out the
+   *  WANs. Throws if SNMP itself is unreachable; returns [] if the walk
+   *  succeeded but nothing looked like a WAN. Callers retry — see the
+   *  recovery block in `tick`. */
+  const discoverWanInterfaces = async (): Promise<SnmpInterface[]> => {
+    const interfaces = await snmpClient.listInterfaces();
+    console.log(`[poller] SNMP discovered ${interfaces.length} interfaces`);
+
+    if (config.snmp.wanIfIndexes.length > 0) {
+      const configured = config.snmp.wanIfIndexes
+        .map((idx) => interfaces.find((i) => i.ifIndex === idx))
+        .filter((i): i is SnmpInterface => !!i);
+      console.log(`[poller] using configured WAN ifIndexes: ${fmtIfaces(configured)}`);
+      return configured;
+    }
+
     // Self-heal: prefer the UniFi controller's own WAN1/WAN2 designation
     // (the user already maintains this in the UniFi UI). If the controller
     // isn't reachable or doesn't expose ifNames, fall back to identifying
@@ -185,44 +183,76 @@ export async function startPoller(): Promise<void> {
       }
     }
     if (controllerIfNames.length > 0) {
-      wanIfaces = resolveWanInterfaces(interfaces, controllerIfNames);
+      const designated = resolveWanInterfaces(interfaces, controllerIfNames);
       console.log(
-        `[poller] controller-designated WAN interfaces: ${wanIfaces.map((i) => `${i.ifIndex}=${i.ifName}`).join(', ') || 'none'} (from ${controllerIfNames.join(',')})`,
+        `[poller] controller-designated WAN interfaces: ${fmtIfaces(designated)} (from ${controllerIfNames.join(',')})`,
       );
+      if (designated.length > 0) return designated;
     }
-    if (wanIfaces.length === 0) {
-      wanIfaces = autoDetectWanInterfaces(interfaces);
-      console.log(
-        `[poller] auto-detected WAN interfaces: ${wanIfaces.map((i) => `${i.ifIndex}=${i.ifName} ip=${i.ipv4Addrs.join('|') || '-'}`).join(', ') || 'none'}`,
+    const auto = autoDetectWanInterfaces(interfaces);
+    console.log(
+      `[poller] auto-detected WAN interfaces: ${auto.map((i) => `${i.ifIndex}=${i.ifName} ip=${i.ipv4Addrs.join('|') || '-'}`).join(', ') || 'none'}`,
+    );
+    return auto;
+  };
+
+  // WAN runtime state is rebuilt whenever discovery succeeds, so a later
+  // re-discovery (recovery, or ifIndex drift after a UDM firmware update)
+  // swaps the interface set without restarting the process. Monthly
+  // counters are keyed by `wan1`/`wan2` and survive the swap.
+  let wans: WanRuntime[] = [];
+  let snmpOk = false;
+  let recoveryAt = 0;
+  let counterFailures = 0;
+
+  /** Adopt a freshly discovered interface set as the live WAN list.
+   *  Labels come from env, falling back to "WAN N". ifName is walked from
+   *  the canonical SNMP ifName OID (1.3.6.1.2.1.31.1.1.1.1) — a kernel name
+   *  like "eth12"; ifAlias is only a fallback for agents without ifName. */
+  const adoptWans = (ifaces: SnmpInterface[]): void => {
+    wans = ifaces.map((iface, i) => ({
+      id: `wan${i + 1}`,
+      ifIndex: iface.ifIndex,
+      ifName: iface.ifName || iface.ifAlias || `if${iface.ifIndex}`,
+      label: config.snmp.wanLabels[i] ?? `WAN ${i + 1}`,
+      speedBitsPerSec: iface.ifHighSpeedMbps * 1_000_000,
+      prevRx: 0,
+      prevTx: 0,
+      prevTs: 0,
+      rxTotal: 0,
+      txTotal: 0,
+      rxBps: 0,
+      txBps: 0,
+    }));
+    snmpOk = wans.length > 0;
+    counterFailures = 0;
+    publishFeatures(snmpOk);
+  };
+
+  // Startup discovery with a short backoff, so the common transient case
+  // (UDM SNMP agent returns one genErr) resolves in seconds rather than
+  // waiting a full recovery interval. Persistent failure is no longer
+  // fatal — `tick` keeps retrying every config.poll.recoveryMs.
+  const backoffsMs = [0, 1000, 2000, 5000, 10000];
+  for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
+    const delay = backoffsMs[attempt] ?? 0;
+    if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+    try {
+      adoptWans(await discoverWanInterfaces());
+      if (snmpOk) break;
+      console.error(`[poller] no WAN interfaces found (attempt ${attempt + 1}/${backoffsMs.length})`);
+    } catch (err) {
+      console.error(
+        `[poller] SNMP discovery failed (attempt ${attempt + 1}/${backoffsMs.length}):`,
+        err,
       );
     }
   }
-
-  const snmpOk = wanIfaces.length > 0;
-  store.setFeatures({ snmpAvailable: snmpOk });
-
-  // Build runtime WAN entries; label from env or fallback to "WAN N".
-  // ifName is now walked from the canonical SNMP ifName OID
-  // (1.3.6.1.2.1.31.1.1.1.1) — kernel name like "eth12". Older code fell
-  // back to ifAlias or a regex against ifDescr; that's only needed if the
-  // agent doesn't expose ifName.
-  const wans: WanRuntime[] = wanIfaces.map((iface, i) => ({
-    id: `wan${i + 1}`,
-    ifIndex: iface.ifIndex,
-    ifName:
-      iface.ifName ||
-      iface.ifAlias ||
-      `if${iface.ifIndex}`,
-    label: config.snmp.wanLabels[i] ?? `WAN ${i + 1}`,
-    speedBitsPerSec: iface.ifHighSpeedMbps * 1_000_000,
-    prevRx: 0,
-    prevTx: 0,
-    prevTs: 0,
-    rxTotal: 0,
-    txTotal: 0,
-    rxBps: 0,
-    txBps: 0,
-  }));
+  if (!snmpOk) {
+    console.error(
+      `[poller] starting without WAN interfaces — retrying every ${config.poll.recoveryMs}ms`,
+    );
+  }
 
   // Per-WAN public IP discovery is deferred — the legacy /stat/health only
   // exposes one entry without an ifname tying it to a specific interface.
@@ -280,10 +310,36 @@ export async function startPoller(): Promise<void> {
   const tick = async (): Promise<void> => {
     const now = Date.now();
 
+    // Recovery: whatever came up dead gets re-attempted here. The Pi can
+    // start panel.service before eth0 has an address (ENETUNREACH), which
+    // would otherwise leave the dashboard blank until a manual restart.
+    if ((!snmpOk || !unifiOk) && now - recoveryAt >= config.poll.recoveryMs) {
+      recoveryAt = now;
+      if (!unifiOk) {
+        try {
+          await unifi.connect();
+          unifiOk = true;
+          console.log(`[poller] UDM API recovered (mode: ${unifi.getMode()})`);
+          publishFeatures(snmpOk);
+        } catch (err) {
+          console.error('[poller] UDM API still unreachable:', err);
+        }
+      }
+      if (!snmpOk) {
+        try {
+          adoptWans(await discoverWanInterfaces());
+          if (snmpOk) console.log(`[poller] SNMP recovered: ${fmtIfaces(wans)}`);
+        } catch (err) {
+          console.error('[poller] SNMP discovery retry failed:', err);
+        }
+      }
+    }
+
     // SNMP: read counters, compute rates from previous reading.
     if (snmpOk) {
       try {
         const counters = await snmpClient.getCounters(wans.map((w) => w.ifIndex));
+        counterFailures = 0;
         for (const w of wans) {
           const c = counters.find((x) => x.ifIndex === w.ifIndex);
           if (!c) continue;
@@ -303,7 +359,17 @@ export async function startPoller(): Promise<void> {
           w.txTotal = c.txOctets;
         }
       } catch (err) {
-        console.error('[poller] SNMP getCounters failed:', err);
+        counterFailures++;
+        console.error(`[poller] SNMP getCounters failed (${counterFailures}x):`, err);
+        // Sustained counter failures mean the ifIndexes we latched onto are
+        // gone (UDM firmware update renumbers them) or the agent went away.
+        // Drop back to discovery rather than polling dead indexes forever.
+        if (counterFailures >= COUNTER_FAILURE_LIMIT) {
+          console.error('[poller] too many consecutive counter failures — re-discovering WANs');
+          snmpOk = false;
+          publishFeatures(false);
+          recoveryAt = 0;
+        }
       }
     }
 

@@ -72,6 +72,10 @@ export const config = {
     clientsMs: num(process.env.PANEL_POLL_CLIENTS_MS, 60000),
     dpiMs: num(process.env.PANEL_POLL_DPI_MS, 60000),
     udmInfoMs: num(process.env.PANEL_POLL_UDM_MS, 15000),
+    // How often to re-attempt a subsystem that came up dead. The Pi can
+    // start panel.service before eth0 has an address, which used to leave
+    // the poller WAN-less (and every chart blank) until a manual restart.
+    recoveryMs: num(process.env.PANEL_POLL_RECOVERY_MS, 30000),
   },
   history: {
     maxSamples: num(process.env.PANEL_HISTORY_SAMPLES, 180),
